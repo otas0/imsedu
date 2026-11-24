@@ -674,19 +674,53 @@ function paragraph(text) {
   p.textContent = text;
   return p;
 }
+function procedureLines(part) {
+  if (!part) return [];
+  if (Array.isArray(part)) return part;
+  if (Array.isArray(part[lang])) return part[lang];
+  if (Array.isArray(part.zh)) return part.zh;
+  if (Array.isArray(part.en)) return part.en;
+  return [];
+}
+function procedureSection(titleKey, lines, listTag) {
+  if (!lines.length) return null;
+  const sec = document.createElement('section');
+  sec.className = 'procedure-sec';
+  const h = document.createElement('h4');
+  h.textContent = t(lang, titleKey);
+  const list = document.createElement(listTag);
+  for (const line of lines) {
+    const li = document.createElement('li');
+    li.textContent = line;
+    list.appendChild(li);
+  }
+  sec.append(h, list);
+  return sec;
+}
 function procedureBlock(proc) {
   const wrap = document.createElement('div');
   wrap.className = 'procedure';
   const h = document.createElement('h3');
   h.textContent = t(lang, 'procedure');
+  wrap.appendChild(h);
+  // Structured lab (prepare / steps / conclude) or legacy flat step list.
+  if (proc && (proc.prepare || proc.steps || proc.conclude)) {
+    const prep = procedureSection('procedurePrepare', procedureLines(proc.prepare), 'ul');
+    const steps = procedureSection('procedureSteps', procedureLines(proc.steps), 'ol');
+    const concl = procedureSection('procedureConclude', procedureLines(proc.conclude), 'ul');
+    if (prep) wrap.appendChild(prep);
+    if (steps) wrap.appendChild(steps);
+    if (concl) wrap.appendChild(concl);
+    return wrap;
+  }
+  const legacy = procedureLines(proc);
   const ol = document.createElement('ol');
-  const steps = (proc && (proc[lang] || proc.zh || proc.en)) || [];
-  for (const step of steps) {
+  for (const step of legacy) {
     const li = document.createElement('li');
     li.textContent = step;
     ol.appendChild(li);
   }
-  wrap.append(h, ol);
+  wrap.appendChild(ol);
   return wrap;
 }
 function primary(label, fn) {

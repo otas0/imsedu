@@ -444,9 +444,29 @@ const shLens = flatten(junior).find((r) => r.lesson.sim === 'convex-lens');
 assert(pepLens && shLens && pepLens.lesson.sim === shLens.lesson.sim, 'one lens engine, two books');
 const pepLab = flatten(getBook('pep-junior')).find((r) => r.lesson.id === 'pep-5-3a');
 const shLab = flatten(junior).find((r) => r.lesson.id === 'shj-4-4a');
-assert(pepLab?.lesson.procedure?.zh?.length >= 5 && pepLab.lesson.procedure.en?.length >= 5, 'pep-5-3a has textbook lab procedure');
-assert(shLab?.lesson.procedure?.zh?.length >= 5 && shLab.lesson.procedure.en?.length >= 5, 'shj-4-4a has textbook lab procedure');
-assert(pepLab.lesson.procedure.zh[0].includes('光具座') && shLab.lesson.procedure.zh[0].includes('光具座'), 'lens lab starts on the optical bench');
+function assertStructuredLab(lesson, label) {
+  const p = lesson?.procedure;
+  assert(p?.prepare?.zh?.length >= 2 && p.prepare.en?.length >= 2, `${label} lab prepare`);
+  assert(p?.steps?.zh?.length >= 4 && p.steps.en?.length >= 4, `${label} lab steps`);
+  assert(p?.conclude?.zh?.length >= 1 && p.conclude.en?.length >= 1, `${label} lab conclude`);
+}
+assertStructuredLab(pepLab?.lesson, 'pep-5-3a');
+assertStructuredLab(shLab?.lesson, 'shj-4-4a');
+assert(pepLab.lesson.procedure.prepare.zh.some((s) => s.includes('光具座')), 'lens prepare mentions optical bench');
+assert(pepLab.lesson.procedure.steps.zh.some((s) => s.includes('1/u + 1/v = 1/f')), 'lens steps cite thin-lens equation');
+{
+  const { LAB_BY_SIM } = await import('../js/curricula/lab-procedures.js');
+  const readyRows = BOOKS.flatMap((b) => flatten(b)).filter((r) => r.lesson.status === 'ready');
+  // Every ready lesson must carry a structured lab (from LAB_BY_SIM or override).
+  const missingProc = readyRows.filter((r) => {
+    const p = r.lesson.procedure;
+    return !(p?.prepare?.zh?.length && p?.steps?.zh?.length && p?.conclude?.zh?.length);
+  });
+  assert(missingProc.length === 0, `ready lessons missing structured lab: ${missingProc.slice(0, 8).map((r) => r.lesson.id).join(',')}`);
+  const sims = [...new Set(readyRows.map((r) => r.lesson.sim))];
+  const missingSim = sims.filter((id) => !LAB_BY_SIM[id]);
+  assert(missingSim.length === 0, `LAB_BY_SIM missing sims: ${missingSim.join(',')}`);
+}
 
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 assert(!indexHtml.includes('id="edition"'), 'index has no edition strip');
@@ -471,6 +491,7 @@ assert(appJs.includes('sourcesBlock'), 'teach column mounts About/sources');
 assert(appJs.includes("wrap.className = 'sources'"), 'sourcesBlock builds footer.sources');
 assert(appJs.includes('procedureBlock'), 'introduce can mount procedureBlock');
 assert(appJs.includes("wrap.className = 'procedure'"), 'procedureBlock builds .procedure');
+assert(appJs.includes("procedureSection('procedurePrepare'") && appJs.includes("procedureSection('procedureSteps'") && appJs.includes("procedureSection('procedureConclude'"), 'procedureBlock mounts prepare/steps/conclude');
 assert(!indexHtml.includes('immspfee-education-logo'), 'index has no education logo asset');
 assert(!/class="brand"/.test(indexHtml), 'header has no brand cell');
 assert(!indexHtml.includes('IMMSPFEE Education</a>'), 'header has no text wordmark');

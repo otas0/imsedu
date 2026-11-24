@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Push HEAD to otas0/immspfee-edu main with HTTP/1.1 and backoff, then wait
+# Push HEAD to otas0/imsedu main with HTTP/1.1 and backoff, then wait
 # for that SHA's Pages run. One push → one watch. Do not start another
 # finished-task push until this script exits; Pages cancel-in-progress
 # would otherwise drop the prior deploy.
@@ -11,7 +11,7 @@ cd "$ROOT"
 # shellcheck source=scripts/push-main-heartbeat.sh
 source "$ROOT/scripts/push-main-heartbeat.sh"
 
-REPO="otas0/immspfee-edu"
+REPO="otas0/imsedu"
 TOKEN="$(gh auth token)"
 AUTH_URL="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
 SHA="$(git rev-parse HEAD)"

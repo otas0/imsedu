@@ -10,7 +10,7 @@ Classroom edition of IMMSPFEE. Lessons follow a textbook, one section at a time.
 | [Contributing](CONTRIBUTING.md) | [Local shots / CI artifacts](.local-shots/README.md) |
 | [A4 promo poster](docs/promo/README.md) | Preview `http://127.0.0.1:4174/docs/promo/poster.html` (Pages does **not** host `docs/`) |
 
-This edition: [github.com/otas0/immspfee-edu](https://github.com/otas0/immspfee-edu) · live Pages [otas0.github.io/immspfee-edu](https://otas0.github.io/immspfee-edu/) (GitHub Pages from `main`). The older path `github.com/otas0/immspfee-education` should redirect to the renamed repo.
+This edition: [github.com/otas0/imsedu](https://github.com/otas0/imsedu) · live Pages [otas0.github.io/imsedu](https://otas0.github.io/imsedu/) (GitHub Pages from `main`). Older paths `github.com/otas0/immspfee-education` and `immspfee-edu` should redirect to this repo.
 
 Header stage tabs are Junior / Senior / University; book titles still name Huke / PEP editions. Every mapped lesson draws readouts, checks, and the mistake overlay from the governing equations in `js/physics/`. The chapter tree shows only lesson titles—no Ready, Exam, or N/N chips. A section that is only queued stays empty on the stage; this tree currently has no queued secondary lessons. Textbook edition notes live under About in the teach column, not in the header.
 
@@ -18,7 +18,7 @@ Header stage tabs are Junior / Senior / University; book titles still name Huke 
 
 IMMSPFEE 教育版：按教材一节一节上课。标准实验室在独立仓库 [otas0/immspfee](https://github.com/otas0/immspfee)，不是本站。
 
-本版地址：[github.com/otas0/immspfee-edu](https://github.com/otas0/immspfee-edu) · 线上 Pages [otas0.github.io/immspfee-edu](https://otas0.github.io/immspfee-edu/)（`main` 自动发布）。旧名 `immspfee-education` 应重定向到本仓。
+本版地址：[github.com/otas0/imsedu](https://github.com/otas0/imsedu) · 线上 Pages [otas0.github.io/imsedu](https://otas0.github.io/imsedu/)（`main` 自动发布）。旧名 `immspfee-education` / `immspfee-edu` 应重定向到本仓。
 
 顶栏学段为「初中 / 高中 / 大学」；书名仍标沪科、人教等版次。已映射节的读数、判定和排故叠层都来自 `js/physics/` 中的方程。章节树只显示节名；大学目录按学科折叠。仅排队的节舞台保持空白；当前树无排队的中学节。教材版次说明在授课栏的 About，不在顶栏。界面默认英文，可切中文。
 

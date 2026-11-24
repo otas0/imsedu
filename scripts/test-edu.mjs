@@ -473,6 +473,9 @@ assert(appJs.includes('procedureBlock'), 'introduce can mount procedureBlock');
 assert(appJs.includes("wrap.className = 'procedure'"), 'procedureBlock builds .procedure');
 assert(!indexHtml.includes('immspfee-education-logo'), 'index has no education logo asset');
 assert(/class="brand"[^>]*>IMMSPFEE Education</.test(indexHtml), 'header brand is text, not an image');
+const posterCopy = readFileSync(new URL('../docs/promo/poster-copy.js', import.meta.url), 'utf8');
+assert(posterCopy.includes("LIVE = 'https://otas0.github.io/imsedu/'"), 'poster LIVE URL is imsedu');
+assert(!posterCopy.includes('immspfee-edu'), 'poster copy drops old Pages path');
 assert(appJs.includes('otas0.github.io/immspfee/'), 'About links to the separate lab site');
 assert(appJs.includes("t(lang, 'labRepo')"), 'About shows lab repo plain text');
 assert(!appJs.includes('otas0/immspfee.git'), 'About does not point git at the lab remote');
@@ -489,6 +492,8 @@ assert(curriculaIndex.includes('?v=__BUILD__'), 'curricula entry imports use sta
 const swJs = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 assert(swJs.includes('./js/curricula/index.js'), 'SW precache includes curricula entry');
 assert(swJs.includes('./js/sims/registry.js'), 'SW precache includes registry');
+assert(swJs.includes("/imsedu'"), 'SW treats /imsedu as code path');
+assert(!swJs.includes('/immspfee-edu'), 'SW drops old Pages path');
 const stamp = readFileSync(new URL('../scripts/stamp-build.mjs', import.meta.url), 'utf8');
 assert(stamp.includes('js/curricula/index.js'), 'stamp required list includes curricula');
 assert(stamp.includes('opt-in'), 'stamp policy documents opt-in tokens');

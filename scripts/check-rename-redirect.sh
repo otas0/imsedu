@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Optional rename health: github.com/otas0/immspfee-education → immspfee-edu.
+# Optional rename health: github.com/otas0/immspfee-education → imsedu.
 # Soft-skips when offline unless REQUIRE_REDIRECT_CHECK=1.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OLD_URL="${RENAME_CHECK_URL:-https://github.com/otas0/immspfee-education}"
-EXPECT="${RENAME_EXPECT_HOST_PATH:-otas0/immspfee-edu}"
+EXPECT="${RENAME_EXPECT_HOST_PATH:-otas0/imsedu}"
 HEADERS_OUT="${REDIRECT_HEADERS_OUT:-$ROOT/.local-shots/redirect-fail-headers.txt}"
 
 hdr="$(mktemp)"
@@ -64,7 +64,7 @@ loc="$(tr -d '\r' <"$hdr" | grep -i '^location:' | head -n 1 | sed 's/^[Ll]ocati
 status="$(tr -d '\r' <"$hdr" | grep -i '^HTTP/' | head -n 1 || true)"
 
 # Sandbox / proxy allowlists sometimes answer HTTP/1.1 200 with no Location
-# (real GitHub returns 301 → otas0/immspfee-edu). Soft-skip that spoof unless
+# (real GitHub returns 301 → otas0/imsedu). Soft-skip that spoof unless
 # CI insists (REQUIRE_REDIRECT_CHECK=1 without REDIRECT_SOFT_SANDBOX_200=1).
 if echo "$status" | grep -qE '200' && [[ -z "$loc" ]]; then
   if [[ "${REQUIRE_REDIRECT_CHECK:-}" == "1" && "${REDIRECT_SOFT_SANDBOX_200:-}" != "1" ]]; then

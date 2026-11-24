@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Purge local Safari/Chrome favicon rows for otas0.github.io/immspfee-edu.
+# Purge local Safari/Chrome favicon rows for otas0.github.io/imsedu.
 # Must run in Terminal.app (or iTerm) with Full Disk Access — Cursor cannot write these paths.
 set -euo pipefail
 
@@ -62,5 +62,5 @@ find "${HOME}/Library/Application Support/Cursor" -name Favicons 2>/dev/null | w
 done
 
 echo ""
-echo "DONE. Re-open Safari to https://otas0.github.io/immspfee-edu/"
+echo "DONE. Re-open Safari to https://otas0.github.io/imsedu/"
 echo "If the old mark remains: Safari → Settings → Privacy → Manage Website Data → search otas0 → Remove."

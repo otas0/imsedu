@@ -199,11 +199,11 @@ fi
 
 if [[ "${PUSH_RESUME_FIXTURE:-}" == "1" ]]; then
   # Real git-fetch mock (no network): fail then ok.
-  if PUSH_FETCH_MOCK=fail attempt_git_fetch 'https://example.invalid/immspfee-edu.git'; then
+  if PUSH_FETCH_MOCK=fail attempt_git_fetch 'https://example.invalid/imsedu.git'; then
     echo "FAIL push-resume fixture: PUSH_FETCH_MOCK=fail must return nonzero" >&2
     exit 1
   fi
-  if ! PUSH_FETCH_MOCK=ok attempt_git_fetch 'https://example.invalid/immspfee-edu.git'; then
+  if ! PUSH_FETCH_MOCK=ok attempt_git_fetch 'https://example.invalid/imsedu.git'; then
     echo "FAIL push-resume fixture: PUSH_FETCH_MOCK=ok must return 0" >&2
     exit 1
   fi

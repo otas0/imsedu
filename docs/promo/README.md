@@ -8,7 +8,7 @@ A4 briefing sheet for IMMSPFEE Education (classroom edition). Pure white sheet a
 | [poster-copy.js](poster-copy.js) | Bilingual copy table (single source) |
 | [poster-books.json](poster-books.json) | Coverage line from curricula (`npm run sync:poster-books`) |
 | Text brand | Header wordmark (no logo image) |
-| [edu-qr.svg](edu-qr.svg) | QR → `https://otas0.github.io/immspfee-edu/` |
+| [edu-qr.svg](edu-qr.svg) | QR → `https://otas0.github.io/imsedu/` |
 
 ## Pages does not host `docs/`
 
@@ -16,7 +16,7 @@ GitHub Pages staging copies `index.html`, `sw.js`, `favicon.ico`, `assets/`, `cs
 
 `http://127.0.0.1:4174/docs/promo/poster.html` (`npm start`).
 
-Do not expect `https://otas0.github.io/immspfee-edu/docs/promo/poster.html`.
+Do not expect `https://otas0.github.io/imsedu/docs/promo/poster.html`.
 
 ## Preview
 
@@ -56,6 +56,6 @@ See [`.local-shots/README.md`](../../.local-shots/README.md) (**Poster baseline 
 
 ## QR / live site
 
-Typed short path and QR target: `https://otas0.github.io/immspfee-edu/` (verify with `curl -sI`). Pages does not serve this poster HTML.
+Typed short path and QR target: `https://otas0.github.io/imsedu/` (verify with `curl -sI`). Pages does not serve this poster HTML.
 
 Sibling posters (different brands — do not copy their chassis): lab `physics-demo/poster.html`, buusdo `docs/promo/poster.html`. Lint: `npm run lint:poster` bans Space Grotesk / IBM Plex.

@@ -16,7 +16,7 @@ This repository is IMMSPFEE Education. Do not point it at the standard lab remot
 - **Reset vs 上一步 (product):** Introduce keeps a single **Reset** (reload lesson + params). Other phases use **上一步** (previous phase). Do not split Explore into a second “reset parameters” ghost — schema fields already edit params. **Explore one-click preset restore: explicitly not shipping** until product asks; then add a dedicated control + smoke.
 - University fold hint: idle → `foldCurrent` + chapter title; while searching → `foldSearchOpen` + same chapter title (`data-searching="1"`). Clearing search restores `foldCurrent` and drops `data-searching`. `data-chapter-id` must match the active chapter.
 - `ui-chrome.js` / `uni-fold.js` are not in `stamp-build` REQUIRED or `sw.js` PRECACHE; cache-bust via `app.js`’s `?v=__BUILD__` imports. **Re-eval (2026-11-06):** still off PRECACHE — triggers + flip PR template in `docs/adr/001-ui-chrome-precache.md`.
-- Minkowski sticky readout hi: **β only** while/after track drag (`_betaHi`). γ / Δt stay plain until product confirmation [issue #1](https://github.com/otas0/immspfee-edu/issues/1) is checked; then extend `STICKY_READOUT_HI_BY_SCHEMA` + smoke-layout (do not paint hi first).
+- Minkowski sticky readout hi: **β only** while/after track drag (`_betaHi`). γ / Δt stay plain until product confirmation [issue #1](https://github.com/otas0/imsedu/issues/1) is checked; then extend `STICKY_READOUT_HI_BY_SCHEMA` + smoke-layout (do not paint hi first).
 - Stage with `bash scripts/git-stage-allow.sh --default` (or explicit paths). Do not run `git add -A` / `--all` / `.` in agent scripts — lint forbids it. Optional hook: `git config core.hooksPath scripts/githooks` ([docs/hooks/stage-allow.md](docs/hooks/stage-allow.md)).
 - **Commit scope (agent races):** Before `git commit`, run `git diff --cached --name-only` and confirm every staged path belongs to *this* task. If another agent left unrelated staged files, `git restore --staged -- <paths>` them. Prefer explicit `git-stage-allow.sh -- path…` over `--default` when infra and lesson WIP coexist. Never ship an infra-only index under a lesson title (or the reverse). Logo vs lesson vs infra stay separate (see Release).
 - Local health: `npm run doctor` (clears bad sidecars; `DOCTOR_AUTO_ENSURE=1` default restarts via ensure-dev-server --no-exec). Not on Pages.
@@ -32,7 +32,7 @@ Promo poster lives at `docs/promo/poster.html` (local `http://127.0.0.1:4174/doc
 
 If the test fails, fix it before pushing. Never deploy a red tree.
 
-Before pushing, check the remote. Push to `otas0/immspfee-edu` if the repo has been renamed; otherwise `otas0/immspfee-education`. Prefer `bash scripts/push-main.sh` (HTTP/1.1 + exponential backoff). Otherwise use `git -c credential.helper='!gh auth git-credential'` / a token HTTPS URL. Do not change git config. Do not touch `otas0/immspfee`.
+Before pushing, check the remote. Push to `otas0/imsedu` (renamed from `immspfee-edu` / `immspfee-education`). Prefer `bash scripts/push-main.sh` (HTTP/1.1 + exponential backoff). Otherwise use `git -c credential.helper='!gh auth git-credential'` / a token HTTPS URL. Do not change git config. Do not touch `otas0/immspfee`.
 
 Pages uses `concurrency.cancel-in-progress: true` so the latest main wins. Keep that default. Only consider `cancel-in-progress: false` if a release explicitly needs every intermediate SHA’s live smoke to finish; that is a deliberate trade-off, not the day-to-day path. Do not fire a second finished-task push while a prior Pages run is still queued or in progress—`scripts/push-main.sh` waits for watch before exiting. A cancelled run on an intermediate SHA is that race, not a content failure.
 
@@ -44,4 +44,4 @@ Pages runners are pinned to `ubuntu-24.04` (not the floating `ubuntu-latest` lab
 
 Lesson commits contain equations, simulations, curricula, and tests only. Logo commits contain only the logo asset, header CSS, and README URL lines. Never mix them.
 
-Confirm that `https://github.com/otas0/immspfee-education` redirects to the renamed repo (`otas0/immspfee-edu`) with `bash scripts/check-rename-redirect.sh` (or `npm run test:redirect`). Do not rename the repo if that work is already in progress; just check. This is checklist item (3) under local preview / university nav.
+Confirm that `https://github.com/otas0/immspfee-education` redirects to the renamed repo (`otas0/imsedu`) with `bash scripts/check-rename-redirect.sh` (or `npm run test:redirect`). Do not rename the repo if that work is already in progress; just check. This is checklist item (3) under local preview / university nav.

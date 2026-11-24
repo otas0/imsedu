@@ -21,7 +21,7 @@ function isCode(url) {
     || url.pathname.endsWith('.mjs')
     || url.pathname.endsWith('.html')
     || url.pathname.endsWith('/')
-    || url.pathname.endsWith('/immspfee-edu')
+    || url.pathname.endsWith('/imsedu')
   );
 }
 

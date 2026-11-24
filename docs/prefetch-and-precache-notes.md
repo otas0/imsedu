@@ -22,7 +22,7 @@ Do not half-lock ohm further: it is already fully locked.
 
 ## Minkowski sticky (#1)
 
-Weekly check: if [#1](https://github.com/otas0/immspfee-edu/issues/1) gains a checked product box, extend γ/Δt sticky (schema → smoke → paint). If product says no, close as not planned. Until then β-only.
+Weekly check: if [#1](https://github.com/otas0/imsedu/issues/1) gains a checked product box, extend γ/Δt sticky (schema → smoke → paint). If product says no, close as not planned. Until then β-only.
 
 ## `phase.js` / `rel.js` vs SW PRECACHE
 
@@ -44,7 +44,7 @@ Weekly check: if [#1](https://github.com/otas0/immspfee-edu/issues/1) gains a ch
 | --- | --- |
 | `deploy-pages` bump | Latest still **v5.0.1**; **#433 still open / unmerged** (re-checked 2026-11-07 late) — hold pin; **bump the day #433 merges** and confirm DEP0040 gone in deploy logs |
 | `ubuntu-24.04` → 26 | Pin stays; on runner-images announcement change: `npm run probe:ubuntu26` then dry-branch Pages (`runs-on: ubuntu-latest`) before moving main |
-| Minkowski γ/Δt sticky | [#1](https://github.com/otas0/immspfee-edu/issues/1) still open / checkboxes unchecked — β only |
+| Minkowski γ/Δt sticky | [#1](https://github.com/otas0/imsedu/issues/1) still open / checkboxes unchecked — β only |
 | Close #1 as not planned | Only after explicit product “no” |
 | OFFLINE_FIRST flip PR | **Gate 1 unmet** — do **not** open flip PR until product explicit yes; local only `npm run offline-first:sidebranch` |
 | Safari 真机 320 | Computer Use ACL still required for 真机 topH / 「人教」abbrev confirm |

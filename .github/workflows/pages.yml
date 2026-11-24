@@ -77,7 +77,7 @@ jobs:
         run: node scripts/smoke-layout.mjs
       - name: Smoke 320px zh book-select CSSOM
         run: node scripts/smoke-book-select.mjs
-      - name: Check immspfee-education → immspfee-edu redirect
+      - name: Check immspfee-education → imsedu redirect
         id: redirect
         env:
           REQUIRE_REDIRECT_CHECK: '1'

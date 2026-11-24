@@ -23,7 +23,7 @@ const pinPath = path.join(root, 'scripts/playwright-version.txt');
 const pinVer = (process.env.PIN_VER || readFileSync(pinPath, 'utf8')).replace(/[ \n\r]/g, '');
 const pinHash = (process.env.PIN_HASH || createHash('sha256').update(pinVer).digest('hex')).slice(0, 8);
 const title = `Playwright pin changed (${pinHash})`;
-const repo = process.env.REPO || 'otas0/immspfee-edu';
+const repo = process.env.REPO || 'otas0/imsedu';
 const fixture = String(process.env.DRY_RUN_FIXTURE || '').trim().toLowerCase();
 
 function ghJson(args) {

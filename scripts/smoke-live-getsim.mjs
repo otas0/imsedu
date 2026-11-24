@@ -6,7 +6,7 @@
  * Mirrors all `js/sims/*` groups from registry PATHS and crawls their relative
  * imports (kit / fmt / physics / sibling sims) so ising/phase/rel/etc. resolve.
  *
- *   PAGES_BASE=https://otas0.github.io/immspfee-edu SHORT=abc1234 \
+ *   PAGES_BASE=https://otas0.github.io/imsedu SHORT=abc1234 \
  *     node scripts/smoke-live-getsim.mjs
  *
  * LIVE_GETSIM_IDS defaults to one sim id per PATHS group (18 groups).

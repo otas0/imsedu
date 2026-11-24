@@ -1,6 +1,6 @@
 /** Bilingual poster copy — single source; poster.html fills from here. */
-export const LIVE = 'https://otas0.github.io/immspfee-edu/';
-export const SHORT = 'otas0.github.io/immspfee-edu';
+export const LIVE = 'https://otas0.github.io/imsedu/';
+export const SHORT = 'otas0.github.io/imsedu';
 
 export const COPY = {
   title: 'IMMSPFEE Education — A4 briefing',

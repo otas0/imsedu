@@ -295,7 +295,7 @@ fi
 echo ""
 
 # --- (3) rename redirect ---
-echo "## 3. rename redirect (immspfee-education → immspfee-edu)"
+echo "## 3. rename redirect (immspfee-education → imsedu)"
 # Soft-skip sandbox/proxy fake HTTP 200 (no Location). Real CI Pages still
 # uses REQUIRE_REDIRECT_CHECK=1 without REDIRECT_SOFT_SANDBOX_200.
 redir_out="$(REQUIRE_REDIRECT_CHECK=1 REDIRECT_SOFT_SANDBOX_200=1 bash scripts/check-rename-redirect.sh 2>&1)" || redir_rc=$?

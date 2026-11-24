@@ -1,4 +1,5 @@
 import { BOOKS, REGIONS, findLesson, flatten, getBook } from './curricula/index.js?v=__BUILD__';
+import { labFigureSvg } from './curricula/lab-figures.js?v=__BUILD__';
 import { getSim, prefetchSims, setImportErrorHandler } from './sims/registry.js?v=__BUILD__';
 import { fmt } from './fmt.js?v=__BUILD__';
 import { t, tx } from './i18n.js?v=__BUILD__';
@@ -641,7 +642,7 @@ function renderTeach() {
   };
 
   if (track === 'experiment') {
-    if (current.lesson.procedure) body.append(procedureBlock(current.lesson.procedure));
+    if (current.lesson.procedure) body.append(procedureBlock(current.lesson.procedure, current.lesson.sim));
     else body.append(paragraph(t(lang, 'experimentEmpty')));
     const back = document.createElement('button');
     back.type = 'button';
@@ -737,22 +738,38 @@ function procedureLines(part) {
   if (Array.isArray(part.en)) return part.en;
   return [];
 }
-function procedureSection(titleKey, lines, listTag) {
+function procedureFigure(simId, sectionKey, index) {
+  if (!simId) return null;
+  const markup = labFigureSvg(simId, sectionKey, index, lang);
+  if (!markup || !markup.includes('<svg')) return null;
+  const fig = document.createElement('div');
+  fig.className = 'procedure-fig';
+  fig.setAttribute('role', 'img');
+  fig.setAttribute('aria-label', lang === 'zh' ? '实验示意图' : 'Lab schematic');
+  fig.innerHTML = markup;
+  return fig;
+}
+function procedureSection(titleKey, lines, listTag, simId, sectionKey) {
   if (!lines.length) return null;
   const sec = document.createElement('section');
   sec.className = 'procedure-sec';
   const h = document.createElement('h4');
   h.textContent = t(lang, titleKey);
   const list = document.createElement(listTag);
-  for (const line of lines) {
+  lines.forEach((line, i) => {
     const li = document.createElement('li');
-    li.textContent = line;
+    const copy = document.createElement('div');
+    copy.className = 'procedure-line';
+    copy.textContent = line;
+    li.appendChild(copy);
+    const fig = procedureFigure(simId, sectionKey, i);
+    if (fig) li.appendChild(fig);
     list.appendChild(li);
-  }
+  });
   sec.append(h, list);
   return sec;
 }
-function procedureBlock(proc) {
+function procedureBlock(proc, simId = null) {
   const wrap = document.createElement('div');
   wrap.className = 'procedure';
   const h = document.createElement('h3');
@@ -760,10 +777,10 @@ function procedureBlock(proc) {
   wrap.appendChild(h);
   // Textbook experiment layout: purpose (optional) → prepare → steps → conclude.
   if (proc && (proc.purpose || proc.prepare || proc.steps || proc.conclude)) {
-    const purpose = procedureSection('procedurePurpose', procedureLines(proc.purpose), 'ul');
-    const prep = procedureSection('procedurePrepare', procedureLines(proc.prepare), 'ul');
-    const steps = procedureSection('procedureSteps', procedureLines(proc.steps), 'ol');
-    const concl = procedureSection('procedureConclude', procedureLines(proc.conclude), 'ul');
+    const purpose = procedureSection('procedurePurpose', procedureLines(proc.purpose), 'ul', simId, 'purpose');
+    const prep = procedureSection('procedurePrepare', procedureLines(proc.prepare), 'ul', simId, 'prepare');
+    const steps = procedureSection('procedureSteps', procedureLines(proc.steps), 'ol', simId, 'steps');
+    const concl = procedureSection('procedureConclude', procedureLines(proc.conclude), 'ul', simId, 'conclude');
     if (purpose) wrap.appendChild(purpose);
     if (prep) wrap.appendChild(prep);
     if (steps) wrap.appendChild(steps);
@@ -772,11 +789,16 @@ function procedureBlock(proc) {
   }
   const legacy = procedureLines(proc);
   const ol = document.createElement('ol');
-  for (const step of legacy) {
+  legacy.forEach((step, i) => {
     const li = document.createElement('li');
-    li.textContent = step;
+    const copy = document.createElement('div');
+    copy.className = 'procedure-line';
+    copy.textContent = step;
+    li.appendChild(copy);
+    const fig = procedureFigure(simId, 'steps', i);
+    if (fig) li.appendChild(fig);
     ol.appendChild(li);
-  }
+  });
   wrap.appendChild(ol);
   return wrap;
 }

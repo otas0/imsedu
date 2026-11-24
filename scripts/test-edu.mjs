@@ -496,6 +496,18 @@ assert(appJs.includes("wrap.className = 'procedure'"), 'procedureBlock builds .p
 assert(appJs.includes("procedureSection('procedurePrepare'") && appJs.includes("procedureSection('procedureSteps'") && appJs.includes("procedureSection('procedureConclude'"), 'procedureBlock mounts prepare/steps/conclude');
 assert(!/if \(phase === 'introduce'\)[\s\S]{0,200}procedureBlock/.test(appJs), 'introduce no longer embeds lab steps');
 assert(appJs.includes("track === 'experiment'"), 'experiment track renders lab separately from theory');
+assert(appJs.includes('labFigureSvg'), 'experiment steps can mount labFigureSvg schematics');
+assert(appJs.includes("className = 'procedure-fig'"), 'procedure figures use .procedure-fig');
+{
+  const { labFigureSvg, LAB_FIGURE_SIMS } = await import('../js/curricula/lab-figures.js');
+  assert(labFigureSvg('convex-lens', 'steps', 0, 'zh')?.includes('<svg'), 'convex-lens step figure');
+  assert(labFigureSvg('convex-lens', 'steps', 4, 'zh')?.includes('<svg'), 'convex-lens u<f figure');
+  assert(labFigureSvg('circuit', 'steps', 0, 'en')?.includes('<svg'), 'circuit step figure');
+  const readySims = [...new Set(BOOKS.flatMap((b) => flatten(b)).filter((r) => r.lesson.status === 'ready').map((r) => r.lesson.sim))];
+  const noFig = readySims.filter((id) => !labFigureSvg(id, 'steps', 0, 'zh')?.includes('<svg'));
+  assert(noFig.length === 0, `every ready sim needs a steps[0] schematic: ${noFig.slice(0, 8).join(',')}`);
+  assert(LAB_FIGURE_SIMS.length >= 20, 'LAB_FIGURE_SIMS lists mapped sims');
+}
 assert(!indexHtml.includes('immspfee-education-logo'), 'index has no education logo asset');
 assert(!/class="brand"/.test(indexHtml), 'header has no brand cell');
 assert(!indexHtml.includes('IMMSPFEE Education</a>'), 'header has no text wordmark');

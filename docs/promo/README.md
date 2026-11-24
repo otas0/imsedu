@@ -1,13 +1,12 @@
 # Education promo
 
-A4 briefing sheet for IMMSPFEE Education (classroom edition). Pure white sheet and text brand top bar, black ink only—**not** the lab instrument chassis (no cream paper).
+A4 briefing sheet for IMMSPFEE Education (classroom edition). Pure white sheet, no logo/brand mark, black ink only—**not** the lab instrument chassis (no cream paper).
 
 | File | Role |
 | --- | --- |
 | [poster.html](poster.html) | Printable A4 bilingual poster (+ `?speaker=1` 讲解员版) |
 | [poster-copy.js](poster-copy.js) | Bilingual copy table (single source) |
 | [poster-books.json](poster-books.json) | Coverage line from curricula (`npm run sync:poster-books`) |
-| Text brand | Header wordmark (no logo image) |
 | [edu-qr.svg](edu-qr.svg) | QR → `https://otas0.github.io/imsedu/` |
 
 ## Pages does not host `docs/`
@@ -49,7 +48,7 @@ npm run capture:poster
 # → .local-shots/poster-340px-screen.png
 # → .local-shots/poster-speaker-zh.png
 # → .local-shots/poster-a4.pdf + poster-a4-fit.json
-# Open PNGs: brand ≤300px; 340px one-column; no horizontal overflow.
+# Open PNGs: 340px one-column; no horizontal overflow.
 ```
 
 See [`.local-shots/README.md`](../../.local-shots/README.md) (**Poster baseline 对照**).

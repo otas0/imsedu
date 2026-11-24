@@ -42,6 +42,6 @@ After each push, watch the Pages workflow until it succeeds (`push-main.sh` does
 
 Pages runners are pinned to `ubuntu-24.04` (not the floating `ubuntu-latest` label). When GitHub moves the default image toward Ubuntu 26, re-run a green Pages deploy on a dry branch first so Node 24 and the Pages actions stay green. Probe: `npm run probe:ubuntu26`.
 
-Lesson commits contain equations, simulations, curricula, and tests only. Logo commits contain only the logo asset, header CSS, and README URL lines. Never mix them.
+Lesson commits contain equations, simulations, curricula, and tests only. Keep chrome/header-only edits out of lesson commits when they are unrelated. There is no site logo or header brand mark.
 
 Confirm that `https://github.com/otas0/immspfee-education` redirects to the renamed repo (`otas0/imsedu`) with `bash scripts/check-rename-redirect.sh` (or `npm run test:redirect`). Do not rename the repo if that work is already in progress; just check. This is checklist item (3) under local preview / university nav.

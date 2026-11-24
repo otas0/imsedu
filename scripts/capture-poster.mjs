@@ -120,7 +120,6 @@ const browser = await chromium.launch(launchOpts());
       booksVisible: br ? br.bottom <= sr.bottom + 2 : false,
       panesClipped: panes.some((p) => p.clipped),
       panes,
-      brandMax: getComputedStyle(document.querySelector('.brand')).maxWidth,
       squareFrames: (() => {
         const framed = [...document.querySelectorAll('.pane, .dock, .qr-box, .books, .callout')];
         return framed.every((el) => {

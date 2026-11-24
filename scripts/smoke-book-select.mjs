@@ -182,27 +182,27 @@ if (!/340px-projectile-ellipsis/.test(shotsTxt) || !/340px-zh-long-title-ellipsi
   console.log('ok .local-shots/README.md documents 340px band captures + strategy table');
 }
 
-// Narrow header CSSOM: 340px uses ≤768/420 two-row areas; 320 must not re-stack lang.
+// Narrow header CSSOM: 340px uses ≤768/420 nav|lang (no brand); 320 must not invent a brand cell.
 const block768 = mediaBlock(css, /@media\s*\(\s*max-width:\s*768px\s*\)/);
 const block420 = mediaBlock(css, /@media\s*\(\s*max-width:\s*420px\s*\)/);
 function stripCssComments(block) {
   return String(block || '').replace(/\/\*[\s\S]*?\*\//g, '');
 }
-function hasTwoRowTop(block) {
+function hasNavLangTop(block) {
   if (!block) return false;
-  return /grid-template-areas\s*:\s*[\s\S]*?["']brand\s+lang["'][\s\S]*?["']nav\s+nav["']/.test(block);
+  return /grid-template-areas\s*:\s*["']nav\s+lang["']/.test(block);
 }
 function areasOkOrInherited(block, label) {
   const code = stripCssComments(block);
   // Comments may name grid-template-areas; only the property counts.
   if (!block || !/grid-template-areas/.test(code)) return true; // inherit prior media
-  if (hasTwoRowTop(code)) return true;
-  console.error(`FAIL edu.css@${label} CSSOM: grid-template-areas must stay brand lang / nav nav`);
+  if (hasNavLangTop(code)) return true;
+  console.error(`FAIL edu.css@${label} CSSOM: grid-template-areas must stay nav lang`);
   return false;
 }
-if (!hasTwoRowTop(block768)) {
+if (!hasNavLangTop(block768)) {
   failed += 1;
-  console.error('FAIL edu.css@768 CSSOM: .top must use grid-template-areas brand lang / nav nav (340px band)');
+  console.error('FAIL edu.css@768 CSSOM: .top must use grid-template-areas nav lang (340px band)');
 } else if (!areasOkOrInherited(block420, '420') || !areasOkOrInherited(block320, '320')) {
   failed += 1;
 } else {

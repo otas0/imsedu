@@ -183,8 +183,6 @@ function writeHash() {
   const next = `#/${bookId}/${lessonId}/${phase}`;
   if (location.hash !== next) history.replaceState(null, '', next);
   localStorage.setItem(ROUTE_KEY, next);
-  const brand = document.querySelector('.brand');
-  if (brand) brand.setAttribute('href', next);
   // Narrow layout: explore/check/debug put the stage above the teach panel so the
   // model is not buried under params (html[data-phase] drives edu.css order).
   document.documentElement.dataset.phase = phase;

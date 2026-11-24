@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
-    /* Pure white sheet + brand bar; black ink — no cream */
+    /* Pure white sheet; black ink — no cream, no brand mark */
     :root {
       --ink: #161616;
       --muted: #5c564c;
@@ -57,25 +57,13 @@
 
     .top {
       display: grid;
-      grid-template-columns: auto 1fr;
-      align-items: center;
+      grid-template-columns: 1fr;
+      align-items: start;
       gap: 10px 14px;
       padding: 4px 0 10px;
-      background: #ffffff; /* brand bar */
+      background: #ffffff;
       border-bottom: none;
       flex: 0 0 auto;
-    }
-
-    .brand {
-      display: block;
-      max-width: min(280px, 100%);
-      line-height: 1.15;
-      color: #161616;
-      text-decoration: none;
-      font-weight: 650;
-      font-size: 16px;
-      letter-spacing: 0.01em;
-      white-space: nowrap;
     }
 
     .hero { min-width: 0; }
@@ -382,9 +370,8 @@
     .books .sep { color: var(--muted); margin: 0 0.3em; }
 
     /* Speaker: larger type + projection QR; still fits one A4 with safe margins */
-    body[data-mode="speaker"] .top { grid-template-columns: auto 1fr auto; }
+    body[data-mode="speaker"] .top { grid-template-columns: 1fr auto; }
     body[data-mode="speaker"] .lang { display: flex; }
-    body[data-mode="speaker"] .brand { max-width: 220px; font-size: 15px; }
     body[data-mode="speaker"] .hero h1 { font-size: 16px; line-height: 1.2; }
     body[data-mode="speaker"] .hero h1.zh { font-size: 15px; }
     body[data-mode="speaker"] .layout { grid-template-columns: 1fr; }
@@ -422,7 +409,6 @@
         box-shadow: none;
       }
       .top { grid-template-columns: 1fr; gap: 4px; padding: 8px; }
-      .brand { max-width: min(220px, calc(100vw - 40px)); font-size: 15px; }
       .hero .eyebrow { margin-bottom: 1px; }
       .hero h1 { font-size: 12.5px; line-height: 1.15; }
       .hero h1.zh { font-size: 12px; line-height: 1.15; margin-top: 1px; }
@@ -468,7 +454,6 @@
         break-inside: avoid;
       }
       body[data-mode="speaker"] .lang { display: none !important; }
-      .brand { max-width: 240px !important; font-size: 15px; }
       @page { size: A4 portrait; margin: 0; }
     }
   </style>
@@ -482,7 +467,6 @@
 
   <article class="sheet" data-poster-sheet>
     <header class="top">
-      <a class="brand" data-live-href href="https://otas0.github.io/imsedu/">IMMSPFEE Education</a>
       <div class="hero">
         <p class="eyebrow" data-copy="eyebrow">Classroom edition</p>
         <h1 class="en" data-copy="hero.en">Open a textbook section. Steer the model. Check from the equation.</h1>

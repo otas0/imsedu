@@ -55,7 +55,7 @@ After any edit to `docs/promo/poster.html` (or logo/QR):
 
 1. `npm start` (or ensure `:4174` is up).
 2. `npm run capture:poster` → overwrites `poster-a4-reference.png` + `poster-340px-screen.png`.
-3. Open both PNGs next to the previous copies (or Quick Look) — check brand ≤300px, A4 crop, and 340px one-column with no horizontal overflow.
+3. Open both PNGs next to the previous copies (or Quick Look) — check A4 crop and 340px one-column with no horizontal overflow.
 4. Optional: `npm run poster:pdf` for print proof.
 
 Do **not** commit the PNGs/PDF. Pages does not host `docs/promo/`.

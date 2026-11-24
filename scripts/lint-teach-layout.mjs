@@ -122,12 +122,12 @@ if (!/@media\s*\(max-width:\s*320px\)/.test(css)) {
   console.error('FAIL edu.css: keep @media (max-width: 320px) for book-select; distinct from canvas w<=360');
 }
 
-// 340px hit chain: @768 sets brand|lang / nav|nav; @420 must keep or inherit; @320 must not stack lang alone.
+// 340px hit chain: @768 sets nav|lang (no brand); @420 must keep or inherit; @320 must not invent a brand cell.
 function stripCssComments(block) {
   return String(block || '').replace(/\/\*[\s\S]*?\*\//g, '');
 }
-function hasTwoRowAreas(block) {
-  return block && /grid-template-areas\s*:\s*[\s\S]*?["']brand\s+lang["'][\s\S]*?["']nav\s+nav["']/.test(block);
+function hasNavLangAreas(block) {
+  return block && /grid-template-areas\s*:\s*["']nav\s+lang["']/.test(block);
 }
 function mediaInner(src, maxWidthPx) {
   const re = new RegExp(`@media\\s*\\(\\s*max-width:\\s*${maxWidthPx}px\\s*\\)`);
@@ -185,20 +185,20 @@ if (!langBtn.some((b) => /min-width:\s*(44|48|52)px/.test(b) && /width:\s*auto/.
 } else {
   console.log('ok edu.css lang button auto width for 中文');
 }
-if (!hasTwoRowAreas(block768)) {
+if (!hasNavLangAreas(block768)) {
   failed += 1;
-  console.error('FAIL edu.css@768: .top grid-template-areas must be brand lang / nav nav (covers 340px)');
+  console.error('FAIL edu.css@768: .top grid-template-areas must be nav lang (no brand; covers 340px)');
 }
-// @420: either set two-row areas, or document inherit from @768 (340 hit chain).
+// @420: either set nav lang areas, or document inherit from @768 (340 hit chain).
 // Strip comments before detecting the property so inherit docs can name grid-template-areas.
 function lint420AreasOrInherit(block) {
   if (!block) return null;
   const code = stripCssComments(block);
   if (/grid-template-areas/.test(code)) {
-    if (!hasTwoRowAreas(code)) return 'bad-areas';
+    if (!hasNavLangAreas(code)) return 'bad-areas';
     return null;
   }
-  if (!/inherit[\s\S]{0,80}@768|inherit[\s\S]{0,80}brand\s+lang|keeps?[\s\S]{0,40}two-row|inherit[\s\S]{0,40}areas/i.test(block)) {
+  if (!/inherit[\s\S]{0,80}@768|inherit[\s\S]{0,80}nav\s+lang|keeps?[\s\S]{0,40}nav\s+lang|inherit[\s\S]{0,40}areas/i.test(block)) {
     return 'missing-inherit-doc';
   }
   return null;
@@ -207,10 +207,10 @@ function lint420AreasOrInherit(block) {
   const err420 = lint420AreasOrInherit(block420);
   if (err420 === 'bad-areas') {
     failed += 1;
-    console.error('FAIL edu.css@420: grid-template-areas must stay brand lang / nav nav (340 hit chain)');
+    console.error('FAIL edu.css@420: grid-template-areas must stay nav lang (340 hit chain)');
   } else if (err420 === 'missing-inherit-doc') {
     failed += 1;
-    console.error('FAIL edu.css@420: if grid-template-areas omitted, comment must document inherit of brand lang / nav nav from @768');
+    console.error('FAIL edu.css@420: if grid-template-areas omitted, comment must document inherit of nav lang from @768');
   }
   // Reverse: bare @420 without areas and without inherit comment must be rejected.
   const bareNoDoc = '  .top { grid-template-columns: minmax(0, 1fr) auto; justify-items: stretch; }\n';
@@ -218,28 +218,28 @@ function lint420AreasOrInherit(block) {
     failed += 1;
     console.error('FAIL lint reverse: @420 without areas/inherit comment must return missing-inherit-doc');
   }
-  // Reverse: wrong areas string (property present but not brand lang / nav nav) → bad-areas.
-  const badAreas = '  .top {\n    grid-template-areas:\n      "brand brand"\n      "nav lang";\n  }\n';
+  // Reverse: wrong areas string (property present but not nav lang) → bad-areas.
+  const badAreas = '  .top {\n    grid-template-areas: "brand lang";\n  }\n';
   if (lint420AreasOrInherit(badAreas) !== 'bad-areas') {
     failed += 1;
     console.error('FAIL lint reverse: @420 wrong grid-template-areas must return bad-areas');
   }
   // Reverse: inherit comment present but code has wrong areas → bad-areas wins (property first).
-  const inheritButBadAreas = '  /* Inherit @768 grid-template-areas: brand lang / nav nav */\n'
-    + '  .top {\n    grid-template-areas:\n      "brand brand"\n      "nav lang";\n  }\n';
+  const inheritButBadAreas = '  /* Inherit @768 grid-template-areas: nav lang */\n'
+    + '  .top {\n    grid-template-areas: "brand lang";\n  }\n';
   if (lint420AreasOrInherit(inheritButBadAreas) !== 'bad-areas') {
     failed += 1;
     console.error('FAIL lint reverse: inherit comment + wrong areas must prefer bad-areas');
   }
-  // Reverse: correct two-row areas with no inherit comment → ok (property path).
-  const goodAreasNoInherit = '  .top {\n    grid-template-areas:\n      "brand lang"\n      "nav nav";\n  }\n';
+  // Reverse: correct nav lang areas with no inherit comment → ok (property path).
+  const goodAreasNoInherit = '  .top {\n    grid-template-areas: "nav lang";\n  }\n';
   if (lint420AreasOrInherit(goodAreasNoInherit) !== null) {
     failed += 1;
     console.error('FAIL lint reverse: correct areas without inherit comment must pass');
   }
   // Reverse: correct areas + extra inherit comment still passes (property wins; comment noise ok).
-  const goodAreasExtraInherit = '  /* Inherit @768 grid-template-areas: brand lang / nav nav */\n'
-    + '  .top {\n    grid-template-areas:\n      "brand lang"\n      "nav nav";\n  }\n';
+  const goodAreasExtraInherit = '  /* Inherit @768 grid-template-areas: nav lang */\n'
+    + '  .top {\n    grid-template-areas: "nav lang";\n  }\n';
   if (lint420AreasOrInherit(goodAreasExtraInherit) !== null) {
     failed += 1;
     console.error('FAIL lint reverse: correct areas + extra inherit comment must still pass');
@@ -381,10 +381,14 @@ function lint420AreasOrInherit(block) {
 }
 if (block320) {
   const code320 = stripCssComments(block320);
-  if (/grid-template-areas/.test(code320) && !hasTwoRowAreas(code320)) {
+  if (/grid-template-areas/.test(code320) && !hasNavLangAreas(code320)) {
     failed += 1;
-    console.error('FAIL edu.css@320: do not stack lang alone; keep brand lang / nav nav or inherit');
+    console.error('FAIL edu.css@320: keep nav lang areas or inherit; no brand cell');
   }
+}
+if (/\.brand\b/.test(css) || /class="brand"/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8'))) {
+  failed += 1;
+  console.error('FAIL header brand must be fully removed (no .brand CSS or markup)');
 }
 
 // Narrow header height: @768/@420 (340 hit chain) and @320 must not force min-height > 100px.

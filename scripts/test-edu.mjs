@@ -472,7 +472,8 @@ assert(appJs.includes("wrap.className = 'sources'"), 'sourcesBlock builds footer
 assert(appJs.includes('procedureBlock'), 'introduce can mount procedureBlock');
 assert(appJs.includes("wrap.className = 'procedure'"), 'procedureBlock builds .procedure');
 assert(!indexHtml.includes('immspfee-education-logo'), 'index has no education logo asset');
-assert(/class="brand"[^>]*>IMMSPFEE Education</.test(indexHtml), 'header brand is text, not an image');
+assert(!/class="brand"/.test(indexHtml), 'header has no brand cell');
+assert(!indexHtml.includes('IMMSPFEE Education</a>'), 'header has no text wordmark');
 const posterCopy = readFileSync(new URL('../docs/promo/poster-copy.js', import.meta.url), 'utf8');
 assert(posterCopy.includes("LIVE = 'https://otas0.github.io/imsedu/'"), 'poster LIVE URL is imsedu');
 assert(!posterCopy.includes('immspfee-edu'), 'poster copy drops old Pages path');

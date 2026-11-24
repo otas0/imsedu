@@ -442,6 +442,11 @@ assert(uni.every((row) => row.chapter.volume === 'uni-cm'), 'uni-cm lessons stay
 const pepLens = flatten(getBook('pep-junior')).find((r) => r.lesson.sim === 'convex-lens');
 const shLens = flatten(junior).find((r) => r.lesson.sim === 'convex-lens');
 assert(pepLens && shLens && pepLens.lesson.sim === shLens.lesson.sim, 'one lens engine, two books');
+const pepLab = flatten(getBook('pep-junior')).find((r) => r.lesson.id === 'pep-5-3a');
+const shLab = flatten(junior).find((r) => r.lesson.id === 'shj-4-4a');
+assert(pepLab?.lesson.procedure?.zh?.length >= 5 && pepLab.lesson.procedure.en?.length >= 5, 'pep-5-3a has textbook lab procedure');
+assert(shLab?.lesson.procedure?.zh?.length >= 5 && shLab.lesson.procedure.en?.length >= 5, 'shj-4-4a has textbook lab procedure');
+assert(pepLab.lesson.procedure.zh[0].includes('光具座') && shLab.lesson.procedure.zh[0].includes('光具座'), 'lens lab starts on the optical bench');
 
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 assert(!indexHtml.includes('id="edition"'), 'index has no edition strip');
@@ -464,6 +469,10 @@ assert(!/t\(lang,\s*['"]exam['"]\)/.test(appJs), 'app has no exam chip');
 assert(!/t\(lang,\s*['"]ready['"]\)/.test(appJs), 'app has no Ready label');
 assert(appJs.includes('sourcesBlock'), 'teach column mounts About/sources');
 assert(appJs.includes("wrap.className = 'sources'"), 'sourcesBlock builds footer.sources');
+assert(appJs.includes('procedureBlock'), 'introduce can mount procedureBlock');
+assert(appJs.includes("wrap.className = 'procedure'"), 'procedureBlock builds .procedure');
+assert(!indexHtml.includes('immspfee-education-logo'), 'index has no education logo asset');
+assert(/class="brand"[^>]*>IMMSPFEE Education</.test(indexHtml), 'header brand is text, not an image');
 assert(appJs.includes('otas0.github.io/immspfee/'), 'About links to the separate lab site');
 assert(appJs.includes("t(lang, 'labRepo')"), 'About shows lab repo plain text');
 assert(!appJs.includes('otas0/immspfee.git'), 'About does not point git at the lab remote');

@@ -622,7 +622,11 @@ function renderTeach() {
     renderTeach();
     draw();
   };
-  if (phase === 'introduce') body.append(paragraph(tx(lang, current.lesson.intro)), primary(t(lang, 'toExplore'), () => goPhase('explore')));
+  if (phase === 'introduce') {
+    body.append(paragraph(tx(lang, current.lesson.intro)));
+    if (current.lesson.procedure) body.append(procedureBlock(current.lesson.procedure));
+    body.append(primary(t(lang, 'toExplore'), () => goPhase('explore')));
+  }
   if (phase === 'explore') {
     body.append(bench(s), transport(s), primary(t(lang, 'toCheck'), () => goPhase('check')));
   }
@@ -671,6 +675,21 @@ function paragraph(text) {
   p.className = 'intro';
   p.textContent = text;
   return p;
+}
+function procedureBlock(proc) {
+  const wrap = document.createElement('div');
+  wrap.className = 'procedure';
+  const h = document.createElement('h3');
+  h.textContent = t(lang, 'procedure');
+  const ol = document.createElement('ol');
+  const steps = (proc && (proc[lang] || proc.zh || proc.en)) || [];
+  for (const step of steps) {
+    const li = document.createElement('li');
+    li.textContent = step;
+    ol.appendChild(li);
+  }
+  wrap.append(h, ol);
+  return wrap;
 }
 function primary(label, fn) {
   const btn = document.createElement('button');

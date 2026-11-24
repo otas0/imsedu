@@ -27,7 +27,7 @@ if (html.includes('#f3efe6')) {
 }
 if (!/\.top\s*\{[^}]*background:\s*#fff/.test(html)) {
   failed += 1;
-  console.error('FAIL poster.html: .top (logo bar) must stay white');
+  console.error('FAIL poster.html: .top (brand bar) must stay white');
 }
 if (!html.includes('var(--safe)') && !html.includes('--safe:')) {
   failed += 1;

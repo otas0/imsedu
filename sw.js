@@ -9,7 +9,6 @@ const PRECACHE = [
   './js/i18n.js',
   './js/curricula/index.js',
   './js/sims/registry.js',
-  './assets/immspfee-education-logo.png',
   './favicon.ico',
   './assets/blank-tab-nov6b.svg',
   './assets/blank-tab-16-nov6b.png',

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
-    /* Pure white sheet + logo bar; black ink — no cream */
+    /* Pure white sheet + brand bar; black ink — no cream */
     :root {
       --ink: #161616;
       --muted: #5c564c;
@@ -61,24 +61,21 @@
       align-items: center;
       gap: 10px 14px;
       padding: 4px 0 10px;
-      background: #ffffff; /* logo bar */
+      background: #ffffff; /* brand bar */
       border-bottom: none;
       flex: 0 0 auto;
     }
 
     .brand {
       display: block;
-      line-height: 0;
-      max-width: min(300px, 100%);
-    }
-    .brand img {
-      display: block;
-      width: 100%;
-      max-width: 260px;
-      height: auto;
-      aspect-ratio: 461 / 123;
-      object-fit: contain;
-      object-position: left center;
+      max-width: min(280px, 100%);
+      line-height: 1.15;
+      color: #161616;
+      text-decoration: none;
+      font-weight: 650;
+      font-size: 16px;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
     }
 
     .hero { min-width: 0; }
@@ -387,7 +384,7 @@
     /* Speaker: larger type + projection QR; still fits one A4 with safe margins */
     body[data-mode="speaker"] .top { grid-template-columns: auto 1fr auto; }
     body[data-mode="speaker"] .lang { display: flex; }
-    body[data-mode="speaker"] .brand img { max-width: 220px; }
+    body[data-mode="speaker"] .brand { max-width: 220px; font-size: 15px; }
     body[data-mode="speaker"] .hero h1 { font-size: 16px; line-height: 1.2; }
     body[data-mode="speaker"] .hero h1.zh { font-size: 15px; }
     body[data-mode="speaker"] .layout { grid-template-columns: 1fr; }
@@ -425,7 +422,7 @@
         box-shadow: none;
       }
       .top { grid-template-columns: 1fr; gap: 4px; padding: 8px; }
-      .brand img { max-width: min(220px, calc(100vw - 40px)); }
+      .brand { max-width: min(220px, calc(100vw - 40px)); font-size: 15px; }
       .hero .eyebrow { margin-bottom: 1px; }
       .hero h1 { font-size: 12.5px; line-height: 1.15; }
       .hero h1.zh { font-size: 12px; line-height: 1.15; margin-top: 1px; }
@@ -471,7 +468,7 @@
         break-inside: avoid;
       }
       body[data-mode="speaker"] .lang { display: none !important; }
-      .brand img { max-width: 240px !important; }
+      .brand { max-width: 240px !important; font-size: 15px; }
       @page { size: A4 portrait; margin: 0; }
     }
   </style>
@@ -485,9 +482,7 @@
 
   <article class="sheet" data-poster-sheet>
     <header class="top">
-      <a class="brand" data-live-href href="https://otas0.github.io/immspfee-edu/">
-        <img src="edu-logo.png" alt="IMMSPFEE Education" width="461" height="123" />
-      </a>
+      <a class="brand" data-live-href href="https://otas0.github.io/immspfee-edu/">IMMSPFEE Education</a>
       <div class="hero">
         <p class="eyebrow" data-copy="eyebrow">Classroom edition</p>
         <h1 class="en" data-copy="hero.en">Open a textbook section. Steer the model. Check from the equation.</h1>

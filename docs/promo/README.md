@@ -1,13 +1,13 @@
 # Education promo
 
-A4 briefing sheet for IMMSPFEE Education (classroom edition). Pure white sheet and logo top bar, black ink only—**not** the lab instrument chassis (no cream paper).
+A4 briefing sheet for IMMSPFEE Education (classroom edition). Pure white sheet and text brand top bar, black ink only—**not** the lab instrument chassis (no cream paper).
 
 | File | Role |
 | --- | --- |
 | [poster.html](poster.html) | Printable A4 bilingual poster (+ `?speaker=1` 讲解员版) |
 | [poster-copy.js](poster-copy.js) | Bilingual copy table (single source) |
 | [poster-books.json](poster-books.json) | Coverage line from curricula (`npm run sync:poster-books`) |
-| [edu-logo.png](edu-logo.png) | Header wordmark (from `assets/`) |
+| Text brand | Header wordmark (no logo image) |
 | [edu-qr.svg](edu-qr.svg) | QR → `https://otas0.github.io/immspfee-edu/` |
 
 ## Pages does not host `docs/`

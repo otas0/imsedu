@@ -1053,14 +1053,19 @@ function plateauGraph(lang, step, kind) {
   if (noPlat) pts = [[x0, y0], [x0 + 200, top + 8]];
   else if (late) pts = [[x0, y0], [x0 + 110, 78], [x0 + (boil ? 168 : 210), 78]];
   else pts = [[x0, y0], [x0 + 58, 78], [x0 + 130, 78], [x0 + (boil ? 168 : 200), 46]];
-  const hi = step === 0 ? [0, 1] : step === 1 || step === 2 ? [1, 2] : step === 2 ? [1, 2] : step === 3 && !noPlat ? [2, 3] : null;
+  // Melt step 2 is after the plateau; boil/sub step 2 stays on the latent-heat flat.
+  const hi = step === 0 ? [0, 1]
+    : step === 1 ? [1, 2]
+    : step === 2 ? (kind === 'melt' ? [2, 3] : [1, 2])
+    : step === 3 && !noPlat ? (kind === 'melt' ? null : [2, 3])
+    : null;
   body += polyLine(pts, INK, 1.8);
   if (hi && pts[hi[1]]) body += polyLine([pts[hi[0]], pts[hi[1]]], RAY, 2.6);
   if (!noPlat) {
     body += dash(x0, 78, pts[2][0], 78, SEC, 1);
     body += text(x0 - 4, 76, names.t, { anchor: 'end', size: 10, fill: SEC });
   }
-  if (step === 1 || step === 2) {
+  if (step === 1 || (step === 2 && kind !== 'melt')) {
     body += text((pts[1][0] + pts[2][0]) / 2, 70, names.a + '→' + names.b, { size: 10, fill: RAY });
   }
   if (boil) {
@@ -1176,7 +1181,8 @@ function drawVt(lang, step) {
   const top = 36;
   let body = axes(x0, top, 220, yBase - top);
   body += axisLabels(x0, top, 214, yBase - top, 't', 'v');
-  const t1 = x0 + (step === 1 || step === 4 ? 36 : 10);
+  // Step 1 parks t₁ at the origin so the shaded area is x(t₂) − x(0).
+  const t1 = x0 + (step === 1 ? 0 : step === 4 ? 36 : 10);
   const t2 = x0 + 180;
   const v1 = step === 3 ? yBase - 18 : yBase - 28;
   const v2 = step === 2 ? yBase + 26 : step === 3 ? yBase - 78 : yBase - 62;
@@ -1469,7 +1475,12 @@ function drawCharges(lang, step) {
     body += text(250, 112, 'F/4', { anchor: 'start', size: 12, fill: RAY });
     body += text(160, 84, L(lang, 'r → 2r', 'r → 2r'), { size: 11, fill: MUTED });
   } else if (step === 3) {
-    body += pair(70, 78, '+', '−', 110, 22, true);
+    // Flip one sign: unlike → attract, then same sign → repel (force reverses).
+    body += pair(40, 48, '+', '−', 100, 18, false);
+    body += text(250, 52, L(lang, '吸', 'attract'), { anchor: 'start', size: 11, fill: SEC });
+    body += pair(40, 108, '−', '−', 100, 18, false);
+    body += text(250, 112, L(lang, '斥', 'repel'), { anchor: 'start', size: 11, fill: RAY });
+    body += text(160, 84, L(lang, '改 q₁ 符号', 'flip q₁'), { size: 11, fill: MUTED });
   } else {
     body += pair(70, 78, '+', step === 0 ? '+' : '−', step === 0 ? 100 : 110, 20, false);
   }
@@ -1491,7 +1502,7 @@ function submergedBlock(bx, liquidTop, liquidBot, frac, label) {
 
 function drawArchimedes(lang, step) {
   const titles = {
-    '-1': [['阿基米德原理', 'Archimedes'], ['浸在液体里的物体', 'An object in a liquid']],
+    '-1': [['阿基米德原理', 'Archimedes'], ['溢水杯与排开的液体', 'Overflow can and displaced liquid']],
     0: [['浸没比例', 'Immersion'], ['读 Vdisp 与浮力 Fb', 'Read Vdisp and buoyant force Fb']],
     1: [['原理', 'The principle'], ['Fb = ρ液 g Vdisp', 'Fb = ρ g Vdisp']],
     2: [['全部浸没', 'Fully under'], ['Vdisp 等于物体体积', 'Vdisp equals the object volume']],
@@ -1501,15 +1512,21 @@ function drawArchimedes(lang, step) {
   const [title, cap] = titles[step];
   const frac = step === 2 || step === 3 || step === 4 ? 1 : step === -1 ? 0.7 : 0.55;
   const deep = step === 3;
-  let body = beaker(78, 36, 120, 100, deep ? 78 : 64);
-  body += submergedBlock(118, deep ? 58 : 72, 134, frac, step === 2 ? 'V' : '');
+  const level = deep ? 78 : 64;
+  // Overflow can (溢水杯) with spout → catch cylinder = Vdisp.
+  let body = beaker(48, 36, 110, 100, level);
+  body += path('M 158 58 L 186 72 L 186 80 L 158 68 Z', { fill: PAPER, w: 1.4 });
+  const catchH = 18 + Math.round(frac * 36);
+  body += cylinder(200, 70, 36, 66, catchH);
+  body += text(218, 148, 'Vdisp', { size: 11, fill: SEC });
+  body += submergedBlock(78, deep ? 58 : 72, 134, frac, step === 2 ? 'V' : '');
   const fLen = step === 4 ? 14 : step === 3 ? 32 : 22;
-  body += arrow(134, 96, 134, 96 - fLen, SEC, 1.7);
-  body += text(150, 96 - fLen, 'Fb', { anchor: 'start', size: 12, fill: SEC });
-  body += arrow(134, 108, 134, 124, INK, 1.4);
-  body += text(150, 122, 'G', { anchor: 'start', size: 11 });
-  if (step === 1 || step === 0) body += text(250, 70, 'Vdisp', { anchor: 'start', size: 11, fill: SEC });
-  if (step === 4) body += text(250, 90, 'g↓', { anchor: 'start', size: 13, fill: RAY });
+  body += arrow(94, 96, 94, 96 - fLen, SEC, 1.7);
+  body += text(108, 96 - fLen, 'Fb', { anchor: 'start', size: 12, fill: SEC });
+  body += arrow(94, 108, 94, 124, INK, 1.4);
+  body += text(108, 122, 'G', { anchor: 'start', size: 11 });
+  if (step === 4) body += text(250, 48, 'g↓', { anchor: 'start', size: 13, fill: RAY });
+  if (step === 3) body += text(250, 48, 'ρ↑', { anchor: 'start', size: 13, fill: RAY });
   return panel(lang, title[0], title[1], cap[0], cap[1], body);
 }
 
@@ -1533,8 +1550,13 @@ function drawFloat(lang, step) {
     body += text(152, 112, L(lang, '水', 'ballast'), { size: 9, fill: SEC });
   } else if (step === 2) {
     body += block(128, 100, 44, 28);
-    body += arrow(150, 128, 150, 142, MUTED, 1.5);
-    body += text(166, 140, 'N', { anchor: 'start', size: 12, fill: MUTED });
+    // Bottom support N upward; G down; Fb up so N = G − Fb.
+    body += arrow(150, 128, 150, 112, MUTED, 1.5);
+    body += text(166, 118, 'N', { anchor: 'start', size: 12, fill: MUTED });
+    body += arrow(138, 114, 138, 100, SEC, 1.3);
+    body += text(118, 104, 'Fb', { anchor: 'end', size: 10, fill: SEC });
+    body += arrow(162, 108, 162, 128, INK, 1.3);
+    body += text(176, 124, 'G', { anchor: 'start', size: 10 });
   } else if (step === 1) {
     body += block(128, 78, 40, 28);
     body += text(148, 96, 'ρ=ρ液', { size: 10 });

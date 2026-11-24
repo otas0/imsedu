@@ -280,6 +280,23 @@ canvas { width: 100%; height: 440px; display: block; border-radius: 12px; touch-
 }
 .sources p { margin: 0 0 6px; }
 .sources a { color: var(--accent); text-underline-offset: 2px; }
+.tracks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.tracks button {
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+.tracks button.on {
+  background: var(--dark);
+  color: white;
+  border-color: var(--dark);
+}
 .phases { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .intro { line-height: 1.5; margin-top: 0; }
 .procedure { margin: 0.75rem 0 1rem; }
@@ -339,10 +356,12 @@ canvas { width: 100%; height: 440px; display: block; border-radius: 12px; touch-
      stage up so the model is on-screen instead of buried under params. */
   html[data-phase="explore"] .layout .teach,
   html[data-phase="check"] .layout .teach,
-  html[data-phase="debug"] .layout .teach { order: 3; }
+  html[data-phase="debug"] .layout .teach,
+  html[data-phase="experiment"] .layout .teach { order: 3; }
   html[data-phase="explore"] .layout main,
   html[data-phase="check"] .layout main,
-  html[data-phase="debug"] .layout main { order: 2; }
+  html[data-phase="debug"] .layout main,
+  html[data-phase="experiment"] .layout main { order: 2; }
   /* Cap chapter list so long university volumes do not bury phases below the fold. */
   aside {
     max-height: min(30vh, 220px);
@@ -352,6 +371,7 @@ canvas { width: 100%; height: 440px; display: block; border-radius: 12px; touch-
   .teach { max-height: none; }
   .stage-wrap { min-height: 300px; }
   canvas { height: min(52vw, 360px); }
+  .tracks,
   .phases {
     position: sticky;
     top: 0;
@@ -360,6 +380,7 @@ canvas { width: 100%; height: 440px; display: block; border-radius: 12px; touch-
     padding: 8px 0 10px;
     border-bottom: 1px solid var(--line);
   }
+  .phases { top: 44px; }
 }
 @media (max-width: 768px) {
   .lang { justify-self: end; }

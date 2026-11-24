@@ -108,8 +108,8 @@ export const shanghaiJunior = {
       ]),
       S('shj-4-4', '凸透镜成像', 'Convex-lens image', [
         R('shj-4-4a', 'convex-lens', '物距、像距与光屏', 'Object, image, and screen',
-          '薄透镜：1/u + 1/v = 1/f。先按下面的实验步骤做完，再进入探究；探究里拖动蜡烛改变物距，拖动光屏去接实像。u < f 时另一侧没有实像。',
-          'Thin lens: 1/u + 1/v = 1/f. Follow the lab procedure below, then Explore: drag the candle to change u, and drag the screen onto a real image. When u < f there is no real image on the far side.',
+          '薄透镜：1/u + 1/v = 1/f。理论里拖动蜡烛改物距、拖光屏接实像；u < f 时另一侧没有实像。完整课本实验在「实验」轨。',
+          'Thin lens: 1/u + 1/v = 1/f. In Theory, drag the candle for u and the screen onto a real image; when u < f there is no real image on the far side. The full textbook lab is under Experiment.',
           { u: 30, f: 10, h: 6, screen: 15, aperture: 2 }, true, CONVEX_LENS_LAB),
       ]),
       S('shj-4-5', '透镜的应用', 'Uses of lenses', [

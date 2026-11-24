@@ -155,9 +155,10 @@ if (!block1100 || !/\.teach\s*\{\s*order:\s*2\s*;/.test(block1100) || !/main\s*\
   console.error('FAIL edu.css@1100: .teach order:2 must precede main order:3 (mobile introduce teach-before-stage)');
 } else if (!/html\[data-phase="explore"\][\s\S]*main\s*\{\s*order:\s*2/.test(block1100)
   || !/html\[data-phase="check"\][\s\S]*main\s*\{\s*order:\s*2/.test(block1100)
-  || !/html\[data-phase="debug"\][\s\S]*main\s*\{\s*order:\s*2/.test(block1100)) {
+  || !/html\[data-phase="debug"\][\s\S]*main\s*\{\s*order:\s*2/.test(block1100)
+  || !/html\[data-phase="experiment"\][\s\S]*main\s*\{\s*order:\s*2/.test(block1100)) {
   failed += 1;
-  console.error('FAIL edu.css@1100: explore/check/debug must set main order:2 so the stage is not buried under params');
+  console.error('FAIL edu.css@1100: explore/check/debug/experiment must set main order:2 so the stage is not buried under params');
 } else if (!/\.phases\s*\{[^}]*position:\s*sticky/.test(block1100)) {
   failed += 1;
   console.error('FAIL edu.css@1100: .phases must be sticky so phase CTAs stay reachable while scrolling');

@@ -164,8 +164,8 @@ export const pepJunior = {
       ]),
       S('pep-5-3', '凸透镜成像的规律', 'Convex-lens rules', [
         R('pep-5-3a', 'convex-lens', '凸透镜成像', 'Convex lens',
-          '薄透镜方程 1/u + 1/v = 1/f。先按下面的实验步骤做完，再进入探究；探究里拖动蜡烛和光屏对照记录。',
-          'Thin-lens equation 1/u + 1/v = 1/f. Follow the lab procedure below, then Explore by dragging the candle and screen.',
+          '薄透镜方程 1/u + 1/v = 1/f。理论里拖动蜡烛和光屏对照读数；完整课本实验步骤在「实验」轨。',
+          'Thin-lens equation 1/u + 1/v = 1/f. In Theory, drag the candle and screen against the readouts; the full textbook lab is under Experiment.',
           { u: 30, f: 10, h: 6, screen: 15, aperture: 2 }, true, CONVEX_LENS_LAB),
       ]),
       S('pep-5-4', '眼睛和眼镜', 'Eyes and glasses', [

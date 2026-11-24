@@ -115,7 +115,8 @@ const LANG_KEY = 'immspfee-edu-lang';
 const CHECK_KEY = 'immspfee-edu-checks';
 const ROUTE_KEY = 'immspfee-edu-route';
 const PHASES = ['introduce', 'explore', 'check', 'debug'];
-const DEFAULT_ROUTE = { bookId: 'sh-junior', lessonId: 'shj-4-4a', phase: 'introduce' };
+const TRACKS = ['theory', 'experiment'];
+const DEFAULT_ROUTE = { bookId: 'sh-junior', lessonId: 'shj-4-4a', phase: 'introduce', track: 'theory' };
 
 const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
@@ -124,6 +125,7 @@ let lang = localStorage.getItem(LANG_KEY) === 'zh' ? 'zh' : 'en';
 let bookId = DEFAULT_ROUTE.bookId;
 let lessonId = DEFAULT_ROUTE.lessonId;
 let phase = DEFAULT_ROUTE.phase;
+let track = DEFAULT_ROUTE.track;
 let params = {};
 let ui = { drag: null, wrong: false };
 let clock = 0;
@@ -176,16 +178,23 @@ function parseHash() {
   const parts = raw.split('/').filter(Boolean);
   if (parts[0] && BOOKS.some((b) => b.id === parts[0])) bookId = parts[0];
   if (parts[1] && findLesson(bookId, parts[1])) lessonId = parts[1];
-  if (parts[2] && PHASES.includes(parts[2])) phase = parts[2];
+  if (parts[2] === 'experiment') {
+    track = 'experiment';
+  } else if (parts[2] && PHASES.includes(parts[2])) {
+    track = 'theory';
+    phase = parts[2];
+  }
 }
 
 function writeHash() {
-  const next = `#/${bookId}/${lessonId}/${phase}`;
+  const leaf = track === 'experiment' ? 'experiment' : phase;
+  const next = `#/${bookId}/${lessonId}/${leaf}`;
   if (location.hash !== next) history.replaceState(null, '', next);
   localStorage.setItem(ROUTE_KEY, next);
-  // Narrow layout: explore/check/debug put the stage above the teach panel so the
-  // model is not buried under params (html[data-phase] drives edu.css order).
-  document.documentElement.dataset.phase = phase;
+  // Narrow layout: explore/check/debug/experiment put the stage above the teach
+  // panel so the model is not buried under params (html[data-phase] drives edu.css).
+  document.documentElement.dataset.phase = track === 'experiment' ? 'experiment' : phase;
+  document.documentElement.dataset.track = track;
 }
 
 const LOAD_TOAST_MS = 8000;
@@ -193,7 +202,13 @@ const LOAD_TOAST_MS = 8000;
 async function loadLesson(nextId, nextPhase) {
   const token = ++loadToken;
   lessonId = nextId;
-  phase = nextPhase || 'introduce';
+  if (nextPhase === 'experiment') {
+    track = 'experiment';
+    phase = 'introduce';
+  } else {
+    track = 'theory';
+    phase = nextPhase || 'introduce';
+  }
   const wanted = lesson().sim;
   currentSim = null;
   loadingSim = wanted || null;
@@ -588,6 +603,56 @@ function renderTeach() {
     return;
   }
 
+  // Theory and Experiment stay parallel: track toggle, then theory phases or lab text.
+  const tracks = document.createElement('div');
+  tracks.className = 'tracks';
+  tracks.setAttribute('role', 'tablist');
+  tracks.setAttribute('aria-label', lang === 'zh' ? '理论与实验' : 'Theory and experiment');
+  TRACKS.forEach((id) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-selected', track === id ? 'true' : 'false');
+    btn.textContent = t(lang, id === 'theory' ? 'trackTheory' : 'trackExperiment');
+    if (track === id) btn.className = 'on';
+    btn.addEventListener('click', () => {
+      const prev = phase;
+      track = id;
+      if (id === 'theory') clearWrongLeavingDebug(prev, phase, ui);
+      else clearWrongLeavingDebug(prev, 'introduce', ui);
+      writeHash();
+      renderTeach();
+      draw();
+    });
+    tracks.appendChild(btn);
+  });
+  host.appendChild(tracks);
+
+  const body = document.createElement('div');
+  body.className = 'phase-body';
+  const goPhase = (id) => {
+    const prev = phase;
+    track = 'theory';
+    phase = id;
+    clearWrongLeavingDebug(prev, id, ui);
+    writeHash();
+    renderTeach();
+    draw();
+  };
+
+  if (track === 'experiment') {
+    if (current.lesson.procedure) body.append(procedureBlock(current.lesson.procedure));
+    else body.append(paragraph(t(lang, 'experimentEmpty')));
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'ghost';
+    back.textContent = t(lang, 'trackTheory');
+    back.addEventListener('click', () => goPhase(phase || 'introduce'));
+    body.appendChild(back);
+    host.append(body, sourcesBlock());
+    return;
+  }
+
   const phases = document.createElement('div');
   phases.className = 'phases';
   phases.setAttribute('role', 'tablist');
@@ -600,6 +665,7 @@ function renderTeach() {
     if (phase === id) btn.className = 'on';
     btn.addEventListener('click', () => {
       const prev = phase;
+      track = 'theory';
       phase = id;
       clearWrongLeavingDebug(prev, id, ui);
       writeHash();
@@ -610,20 +676,9 @@ function renderTeach() {
   });
   host.appendChild(phases);
 
-  const body = document.createElement('div');
-  body.className = 'phase-body';
-  const goPhase = (id) => {
-    const prev = phase;
-    phase = id;
-    clearWrongLeavingDebug(prev, id, ui);
-    writeHash();
-    renderTeach();
-    draw();
-  };
+  // Theory only: equation intro — lab steps live under Experiment.
   if (phase === 'introduce') {
-    body.append(paragraph(tx(lang, current.lesson.intro)));
-    if (current.lesson.procedure) body.append(procedureBlock(current.lesson.procedure));
-    body.append(primary(t(lang, 'toExplore'), () => goPhase('explore')));
+    body.append(paragraph(tx(lang, current.lesson.intro)), primary(t(lang, 'toExplore'), () => goPhase('explore')));
   }
   if (phase === 'explore') {
     body.append(bench(s), transport(s), primary(t(lang, 'toCheck'), () => goPhase('check')));
@@ -703,11 +758,13 @@ function procedureBlock(proc) {
   const h = document.createElement('h3');
   h.textContent = t(lang, 'procedure');
   wrap.appendChild(h);
-  // Structured lab (prepare / steps / conclude) or legacy flat step list.
-  if (proc && (proc.prepare || proc.steps || proc.conclude)) {
+  // Textbook experiment layout: purpose (optional) → prepare → steps → conclude.
+  if (proc && (proc.purpose || proc.prepare || proc.steps || proc.conclude)) {
+    const purpose = procedureSection('procedurePurpose', procedureLines(proc.purpose), 'ul');
     const prep = procedureSection('procedurePrepare', procedureLines(proc.prepare), 'ul');
     const steps = procedureSection('procedureSteps', procedureLines(proc.steps), 'ol');
     const concl = procedureSection('procedureConclude', procedureLines(proc.conclude), 'ul');
+    if (purpose) wrap.appendChild(purpose);
     if (prep) wrap.appendChild(prep);
     if (steps) wrap.appendChild(steps);
     if (concl) wrap.appendChild(concl);

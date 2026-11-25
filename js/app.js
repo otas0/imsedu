@@ -201,10 +201,18 @@ function writeHash() {
   syncExperimentExpand();
 }
 
+function syncTopBarHeight() {
+  const top = document.querySelector('.top');
+  const h = top ? Math.ceil(top.getBoundingClientRect().height) : 56;
+  document.documentElement.style.setProperty('--edu-top-h', `${Math.max(40, h)}px`);
+}
+
 function syncExperimentExpand() {
   if (track !== 'experiment') experimentExpand = false;
-  if (experimentExpand) document.documentElement.dataset.experimentExpand = '1';
-  else delete document.documentElement.dataset.experimentExpand;
+  if (experimentExpand) {
+    syncTopBarHeight();
+    document.documentElement.dataset.experimentExpand = '1';
+  } else delete document.documentElement.dataset.experimentExpand;
 }
 
 const LOAD_TOAST_MS = 8000;
@@ -1037,7 +1045,10 @@ canvas.addEventListener('pointerup', (ev) => {
 document.getElementById('lang-en').addEventListener('click', () => { lang = 'en'; localStorage.setItem(LANG_KEY, lang); render(); });
 document.getElementById('lang-zh').addEventListener('click', () => { lang = 'zh'; localStorage.setItem(LANG_KEY, lang); render(); });
 document.getElementById('search').addEventListener('input', (ev) => { query = ev.target.value; renderTree(); });
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => {
+  if (experimentExpand) syncTopBarHeight();
+  resize();
+});
 new ResizeObserver(() => resize()).observe(document.querySelector('.stage-wrap'));
 window.addEventListener('hashchange', () => { parseHash(); loadLesson(lessonId, phase); });
 window.addEventListener('keydown', (ev) => {

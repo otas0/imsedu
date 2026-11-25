@@ -127,6 +127,8 @@ let bookId = DEFAULT_ROUTE.bookId;
 let lessonId = DEFAULT_ROUTE.lessonId;
 let phase = DEFAULT_ROUTE.phase;
 let track = DEFAULT_ROUTE.track;
+/** Experiment teach panel spreads over the viewport while true. */
+let experimentExpand = false;
 let params = {};
 let ui = { drag: null, wrong: false };
 let clock = 0;
@@ -196,6 +198,13 @@ function writeHash() {
   // panel so the model is not buried under params (html[data-phase] drives edu.css).
   document.documentElement.dataset.phase = track === 'experiment' ? 'experiment' : phase;
   document.documentElement.dataset.track = track;
+  syncExperimentExpand();
+}
+
+function syncExperimentExpand() {
+  if (track !== 'experiment') experimentExpand = false;
+  if (experimentExpand) document.documentElement.dataset.experimentExpand = '1';
+  else delete document.documentElement.dataset.experimentExpand;
 }
 
 const LOAD_TOAST_MS = 8000;
@@ -619,14 +628,29 @@ function renderTeach() {
     btn.addEventListener('click', () => {
       const prev = phase;
       track = id;
-      if (id === 'theory') clearWrongLeavingDebug(prev, phase, ui);
-      else clearWrongLeavingDebug(prev, 'introduce', ui);
+      if (id === 'theory') {
+        experimentExpand = false;
+        clearWrongLeavingDebug(prev, phase, ui);
+      } else clearWrongLeavingDebug(prev, 'introduce', ui);
       writeHash();
       renderTeach();
       draw();
     });
     tracks.appendChild(btn);
   });
+  if (track === 'experiment') {
+    const expandBtn = document.createElement('button');
+    expandBtn.type = 'button';
+    expandBtn.className = 'experiment-expand';
+    expandBtn.setAttribute('aria-pressed', experimentExpand ? 'true' : 'false');
+    expandBtn.textContent = t(lang, experimentExpand ? 'experimentCollapse' : 'experimentExpand');
+    expandBtn.addEventListener('click', () => {
+      experimentExpand = !experimentExpand;
+      syncExperimentExpand();
+      renderTeach();
+    });
+    tracks.appendChild(expandBtn);
+  }
   host.appendChild(tracks);
 
   const body = document.createElement('div');
@@ -635,6 +659,7 @@ function renderTeach() {
     const prev = phase;
     track = 'theory';
     phase = id;
+    experimentExpand = false;
     clearWrongLeavingDebug(prev, id, ui);
     writeHash();
     renderTeach();
@@ -1015,6 +1040,12 @@ document.getElementById('search').addEventListener('input', (ev) => { query = ev
 window.addEventListener('resize', resize);
 new ResizeObserver(() => resize()).observe(document.querySelector('.stage-wrap'));
 window.addEventListener('hashchange', () => { parseHash(); loadLesson(lessonId, phase); });
+window.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape' || !experimentExpand) return;
+  experimentExpand = false;
+  syncExperimentExpand();
+  renderTeach();
+});
 
 function tick(now) {
   if (playing) {

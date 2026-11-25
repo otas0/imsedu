@@ -498,6 +498,9 @@ assert(!/if \(phase === 'introduce'\)[\s\S]{0,200}procedureBlock/.test(appJs), '
 assert(appJs.includes("track === 'experiment'"), 'experiment track renders lab separately from theory');
 assert(appJs.includes('labFigureSvg'), 'experiment steps can mount labFigureSvg schematics');
 assert(appJs.includes("className = 'procedure-fig'"), 'procedure figures use .procedure-fig');
+assert(appJs.includes("className = 'experiment-expand'"), 'experiment track mounts expand control');
+assert(appJs.includes('syncExperimentExpand') && appJs.includes('experimentExpand'), 'experiment expand syncs html dataset');
+assert(appJs.includes("t(lang, experimentExpand ? 'experimentCollapse' : 'experimentExpand')"), 'expand control uses i18n labels');
 {
   const { labFigureSvg, LAB_FIGURE_SIMS } = await import('../js/curricula/lab-figures.js');
   assert(labFigureSvg('convex-lens', 'steps', 0, 'zh')?.includes('<svg'), 'convex-lens step figure');
@@ -519,6 +522,10 @@ assert(appJs.includes("t(lang, 'labRepo')"), 'About shows lab repo plain text');
 assert(!appJs.includes('otas0/immspfee.git'), 'About does not point git at the lab remote');
 assert(appJs.includes('loadingSim') && appJs.includes("t(lang, 'simLoading')"), 'loadLesson paints loading not false fail');
 const i18nJs = readFileSync(new URL('../js/i18n.js', import.meta.url), 'utf8');
+assert(i18nJs.includes("experimentExpand: 'Expand'") && i18nJs.includes("experimentExpand: '铺满'"), 'experimentExpand EN/ZH');
+assert(i18nJs.includes("experimentCollapse: 'Collapse'") && i18nJs.includes("experimentCollapse: '收起'"), 'experimentCollapse EN/ZH');
+const eduCss = readFileSync(new URL('../css/edu.css', import.meta.url), 'utf8');
+assert(eduCss.includes('html[data-experiment-expand="1"] .teach') && /data-experiment-expand="1"[^\{]*\{[^}]*position:\s*fixed/.test(eduCss), 'experiment expand CSS is fullscreen teach');
 assert(i18nJs.includes('labLink'), 'i18n has labLink');
 assert(i18nJs.includes('labRepo'), 'i18n has labRepo');
 assert(i18nJs.includes("queuedTitle: 'Mapped, not simulated yet'"), 'empty-state Mapped title kept');

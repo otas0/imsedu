@@ -215,6 +215,9 @@ jobs:
         with:
           path: _site
           # .git / .github never in _site; action also excludes them if present.
+      # deploy-pages@v5 sometimes races upload metadata (Found 0 artifact(s)). Brief settle.
+      - name: Settle Pages artifact metadata
+        run: sleep 20
       - id: deployment
         uses: actions/deploy-pages@v5
       - name: Smoke live module URLs

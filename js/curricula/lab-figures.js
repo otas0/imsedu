@@ -12,13 +12,13 @@ const MUTED = '#5e584e';
 const PAPER = '#fffdf8';
 const H = 160;
 /** Default Experiment panel height — room for table + caption without stacking. */
-const H3 = 200;
+const H3 = 210;
 /** Oblique (cabinet) foreshortening — keep KY mild so depth does not bury labels. */
-const OBL_KX = 0.42;
-const OBL_KY = 0.18;
+const OBL_KX = 0.40;
+const OBL_KY = 0.16;
 /** Table origin in SVG (front-left corner of the board). */
-const OBL_OX = 42;
-const OBL_OY = 148;
+const OBL_OX = 48;
+const OBL_OY = 152;
 
 function r(n) {
   const v = Math.round(Number(n) * 10) / 10;
@@ -121,9 +121,16 @@ function obl(x, y, z, ox = OBL_OX, oy = OBL_OY) {
 
 /** Dimension along the front apron (z≈0), clear of apparatus. */
 function dimFront(x1, x2, label, color = SEC, z = 2) {
-  const [a, y] = obl(x1, -8, z);
-  const [b] = obl(x2, -8, z);
-  return hDim(a, b, y, label, color);
+  const [a, y] = obl(x1, -18, z);
+  const [b] = obl(x2, -18, z);
+  // Extra lift so the label clears the apron edge.
+  return hDim(a, b, y + 2, label, color);
+}
+
+/** Flat white schematic card on the table (for circuits / clean 2D diagrams). */
+function noteCard(x, z, w, h) {
+  return oblPoly3([[x, 1, z], [x + w, 1, z], [x + w, 1, z + 4], [x, 1, z + 4]], { fill: '#ebe4d6', w: 1 }) +
+    oblPoly3([[x, 2, z + 2], [x + w, 2, z + 2], [x + w, 2 + h, z + 2], [x, 2 + h, z + 2]], { fill: PAPER, w: 1.3 });
 }
 
 /** Whiteboard / chart easel standing on the table (face at z−). */
@@ -325,12 +332,17 @@ function chartMapper(cx, z, w, h, fx0 = 20, fy0 = 32, fx1 = 292, fy1 = 140) {
 }
 
 function obliqueShown(lang, step, table, draw) {
+  // Prefer a clean flat schematic above a short bench — chartMapper was crowding labels.
   const row = table[step];
-  let body = tableBoard(220, 72);
-  body += chartStand(110, 42, 176, 72);
-  const M = chartMapper(110, 42, 176, 72);
-  body += draw(M);
-  return panel(lang, row[0][0], row[0][1], row[1][0], row[1][1], body, H3);
+  let body = tableBoard(210, 52);
+  body += draw({
+    map: (x, y) => [x, y],
+    line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim,
+    ground, crosses, hatchesH, hatchesV,
+    chargeBall: (x, y, sign, rad = 16) => circ(x, y, rad, { fill: PAPER, w: 1.4 }) + text(x, y + 4, sign, { size: 12, fill: sign === '+' ? RAY : SEC }),
+    sinePts, block, pendulum, springV, piston, convexLens, screenPlate, beaker, magnetBar,
+  });
+  return panel(lang, row[0][0], row[0][1], row[1][0], row[1][1], body);
 }
 
 function oblRay(a, b, color = RAY) {
@@ -418,29 +430,33 @@ function candle3d(x, z, o = {}) {
   const lit = !!o.lit;
   const ghost = !!o.ghost;
   const thin = !!o.thin;
-  const rad = thin ? 3.2 : 5.5;
-  const fill = ghost ? 'rgba(200,200,200,0.35)' : PAPER;
+  const rad = thin ? 3.4 : 5.8;
+  const fill = ghost ? 'rgba(210,210,210,0.4)' : PAPER;
   const stroke = ghost ? MUTED : INK;
-  const sw = ghost ? 1.1 : 1.4;
-  // Body as a short prism + ellipse top.
+  const sw = ghost ? 1.15 : 1.45;
+  const dz = rad * 0.55;
+  // Front face + right face + elliptical top (textbook candle cylinder).
   let s = oblPoly3(
-    [[x - rad, 0, z - rad * 0.4], [x + rad, 0, z - rad * 0.4], [x + rad, h, z - rad * 0.4], [x - rad, h, z - rad * 0.4]],
+    [[x - rad, 0, z], [x + rad, 0, z], [x + rad, h, z], [x - rad, h, z]],
     { fill, stroke, w: sw },
   );
-  const [tcx, tcy] = obl(x, h, z);
-  s += `<ellipse cx="${r(tcx)}" cy="${r(tcy)}" rx="${r(rad + 1)}" ry="${r(rad * 0.45)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  s += oblPoly3(
+    [[x + rad, 0, z], [x + rad, 0, z + dz], [x + rad, h, z + dz], [x + rad, h, z]],
+    { fill: ghost ? 'rgba(190,190,190,0.3)' : '#efe8dc', stroke, w: sw },
+  );
+  const [tcx, tcy] = obl(x, h, z + dz * 0.35);
+  s += `<ellipse cx="${r(tcx)}" cy="${r(tcy)}" rx="${r(rad + 0.8)}" ry="${r(rad * 0.42)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
   if (lit && !ghost) {
-    const [fx, fy] = obl(x, h + 14, z);
+    const [fx, fy] = obl(x, h + 13, z + dz * 0.2);
     s += path(
-      `M ${r(tcx)} ${r(tcy - 2)} C ${r(tcx + 5)} ${r(tcy - 8)}, ${r(tcx + 3)} ${r(fy)}, ${r(fx)} ${r(fy)} C ${r(tcx - 3)} ${r(fy)}, ${r(tcx - 5)} ${r(tcy - 8)}, ${r(tcx)} ${r(tcy - 2)}`,
-      { stroke: RAY, fill: '#ffe0c2', w: 1.1 },
+      `M ${r(tcx)} ${r(tcy - 1)} C ${r(tcx + 4.5)} ${r(tcy - 7)}, ${r(tcx + 2.5)} ${r(fy)}, ${r(fx)} ${r(fy)} C ${r(tcx - 2.5)} ${r(fy)}, ${r(tcx - 4.5)} ${r(tcy - 7)}, ${r(tcx)} ${r(tcy - 1)}`,
+      { stroke: RAY, fill: '#ffe0c2', w: 1.05 },
     );
-    // Soft glow on the table near the base (textbook “lit” cue).
     const [bx, by] = obl(x, 0, z);
-    s += circ(bx, by, 14, { fill: RAY, op: 0.12, stroke: 'none' });
+    s += circ(bx, by, 12, { fill: RAY, op: 0.11, stroke: 'none' });
   }
   if (o.label) {
-    const [lx, ly] = obl(x, h + (lit ? 22 : 10), z);
+    const [lx, ly] = obl(x, h + (lit ? 20 : 12), z + dz * 0.2);
     s += text(lx, ly, o.label, { size: 12, bold: true, fill: ghost ? MUTED : INK });
   }
   return s;
@@ -734,11 +750,12 @@ function ray(x1, y1, x2, y2, color = RAY) {
 function hDim(x1, x2, y, label, color = SEC) {
   const a = Math.min(x1, x2);
   const b = Math.max(x1, x2);
-  if (b - a < 8) return text((a + b) / 2, y - 3, label, { size: 10, fill: color });
+  // Label sits clearly above the rule so it never rides the stroke.
+  if (b - a < 8) return text((a + b) / 2, y - 8, label, { size: 10, fill: color });
   return line(a, y, b, y, color, 1.1) +
     line(a, y - 3, a, y + 3, color, 1.1) +
     line(b, y - 3, b, y + 3, color, 1.1) +
-    text((a + b) / 2, y - 4, label, { size: 10, fill: color });
+    text((a + b) / 2, y - 8, label, { size: 10, fill: color });
 }
 
 function vDim(x, y1, y2, label, color = SEC) {
@@ -1007,34 +1024,35 @@ function drawConvex(lang, step) {
     5: { title: ['薄透镜方程', 'Thin-lens equation'], cap: ['1/u + 1/v = 1/f', '1/u + 1/v = 1/f'], u: 88, f: 38, law: true },
   };
   const c = cases[step];
-  const z = 40;
-  const lensX = 100;
-  const u = Math.min(c.u, 78);
-  const objX = Math.max(16, lensX - u);
+  const z = 38;
+  const lensX = 96;
+  // Keep candle · lens · screen on the board with clear gaps.
+  const u = Math.min(c.u, 52);
+  const objX = Math.max(24, lensX - u);
   let v = c.v;
   if (v == null && !c.atFocus && !c.virtual) {
-    const inv = 1 / c.f - 1 / u;
-    v = inv > 0.001 ? 1 / inv : 90;
+    const inv = 1 / c.f - 1 / Math.max(u, 1);
+    v = inv > 0.001 ? 1 / inv : 70;
   }
-  const scrX = Math.min(200, c.virtual || c.atFocus ? lensX + 90 : lensX + Math.min(v, 90));
-  let body = tableBoard(220, 72);
-  body += oblPoly3([[14, 2, z - 6], [206, 2, z - 6], [206, 2, z + 6], [14, 2, z + 6]], { fill: '#d8d2c6', w: 1.2 });
+  const scrX = Math.min(186, c.virtual || c.atFocus ? lensX + 72 : lensX + Math.min(v, 72));
+  let body = tableBoard(210, 70);
+  body += oblPoly3([[20, 2, z - 5], [190, 2, z - 5], [190, 2, z + 5], [20, 2, z + 5]], { fill: '#d8d2c6', w: 1.2 });
   body += candle3d(objX, z, { h: 24, lit: true, label: L(lang, '物', 'Obj') });
-  body += lensOnStand(lensX, z, 54);
-  body += text(...obl(lensX, 62, z), L(lang, '透镜', 'Lens'), { size: 10 });
+  body += lensOnStand(lensX, z, 52);
+  body += text(...obl(lensX, 60, z), L(lang, '透镜', 'Lens'), { size: 10 });
   if (!c.virtual) {
-    body += screenOnStand(scrX, z, c.atFocus ? 44 : 48);
-    body += text(...obl(scrX + 10, 60, z), c.atFocus ? L(lang, '无实像', 'no image') : L(lang, '光屏', 'Screen'), {
+    body += screenOnStand(scrX, z, c.atFocus ? 42 : 46);
+    body += text(...obl(scrX + 12, 56, z), c.atFocus ? L(lang, '无实像', 'no image') : L(lang, '光屏', 'Screen'), {
       anchor: 'start', size: 10, fill: c.atFocus ? RAY : SEC,
     });
   } else {
-    body += screenOnStand(scrX, z, 44);
-    body += text(...obl(lensX - 28, 42, z), L(lang, '虚像', 'virtual'), { size: 11, fill: SEC });
+    body += screenOnStand(scrX, z, 42);
+    body += text(...obl(objX - 4, 48, z), L(lang, '虚像', 'virtual'), { size: 11, fill: SEC });
   }
   body += dimFront(objX, lensX, 'u');
   if (!c.atFocus && !c.virtual) body += dimFront(lensX, scrX, 'v', SEC);
-  if (c.law) body += dimFront(lensX, lensX + Math.min(c.f, 40), 'f', RAY);
-  if (c.prep) body += oblLine([objX, 36, z], [scrX, 36, z], SEC, 1.1, '4 3');
+  if (c.law) body += dimFront(lensX, lensX + Math.min(c.f, 36), 'f', RAY);
+  if (c.prep) body += oblLine([objX, 34, z], [scrX, 34, z], SEC, 1.1, '4 3');
   return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
 }
 
@@ -1080,96 +1098,82 @@ function drawReflection(lang, step) {
     4: { th: 55, title: ['再核一次', 'Check again'], cap: ['另一条光线仍是 i = r', 'Another ray still has i = r'], second: true },
   };
   const c = steps[step];
-  const mx = 130;
-  const z = 48;
-  const hitY = 36;
+  const mx = 118;
+  const z = 40;
+  const hitY = 34;
   const th = (c.th * Math.PI) / 180;
-  const len = 70;
-  let body = tableBoard(220, 72);
-  body += glassPlate(mx, 22, 58, 70);
-  body += clampBlock(mx, 24, '');
-  body += clampBlock(mx, 56, '');
-  const [nx1, ny1] = obl(mx, hitY, z);
-  const [nx2, ny2] = obl(mx - 50, hitY, z);
-  body += dash(nx1, ny1, nx2, ny2, MUTED, 1.1);
-  const [nlx, nly] = obl(mx - 54, hitY + 8, z);
-  body += text(nlx, nly, L(lang, '法线', 'N'), { size: 10, fill: MUTED });
+  const len = 58;
+  let body = tableBoard(210, 70);
+  body += glassPlate(mx, 24, 56, 66);
+  body += clampBlock(mx, 26, '');
+  body += clampBlock(mx, 54, '');
+  body += oblLine([mx, hitY, z], [mx - 48, hitY, z], MUTED, 1.1, '4 3');
+  body += text(...obl(mx - 56, hitY + 10, z), L(lang, '法线', 'N'), { size: 10, fill: MUTED });
   if (c.th < 1) {
-    body += oblLine([mx - 55, hitY, z], [mx, hitY, z], RAY, 1.5);
-    body += oblLine([mx, hitY, z], [mx - 55, hitY, z], RAY, 1.5);
-    body += text(...obl(mx - 40, hitY + 14, z), 'θ = 0', { size: 11, fill: RAY });
+    body += oblLine([mx - 50, hitY, z], [mx, hitY, z], RAY, 1.5);
+    body += text(...obl(mx - 36, hitY + 14, z), 'θ = 0', { size: 11, fill: RAY });
   } else {
     const ix = mx - Math.cos(th) * len;
-    const iy = hitY + Math.sin(th) * len * 0.55;
+    const iy = hitY + Math.sin(th) * len * 0.5;
     const rx = mx - Math.cos(th) * len;
-    const ry = hitY - Math.sin(th) * len * 0.55;
-    const [a1, b1] = obl(ix, iy, z);
-    const [a2, b2] = obl(mx, hitY, z);
-    const [a3, b3] = obl(rx, ry, z);
-    body += ray(a1, b1, a2, b2, RAY);
-    body += ray(a2, b2, a3, b3, RAY);
-    body += text(...obl(mx - 28, hitY + 18, z), 'θ', { size: 12, fill: RAY });
-    body += text(...obl(mx - 28, hitY - 10, z), 'θ', { size: 12, fill: RAY });
+    const ry = hitY - Math.sin(th) * len * 0.5;
+    body += ray(...obl(ix, iy, z), ...obl(mx, hitY, z), RAY);
+    body += ray(...obl(mx, hitY, z), ...obl(rx, ry, z), RAY);
+    body += text(...obl(mx - 26, hitY + 16, z), 'θ', { size: 12, fill: RAY });
+    body += text(...obl(mx - 26, hitY - 12, z), 'θ', { size: 12, fill: RAY });
   }
-  if (c.glancing) {
-    body += text(...obl(mx - 70, 8, z), '90°−θ', { size: 10, fill: MUTED });
-  }
+  if (c.glancing) body += text(...obl(40, 12, z), '90°−θ', { size: 10, fill: MUTED });
   if (c.second) {
     const th2 = (28 * Math.PI) / 180;
-    const ix = mx - Math.cos(th2) * 50;
-    const iy = hitY + Math.sin(th2) * 28;
-    const rx = mx - Math.cos(th2) * 50;
-    const ry = hitY - Math.sin(th2) * 28;
-    body += oblLine([ix, iy, z], [mx, hitY, z], SEC, 1.3);
-    body += oblLine([mx, hitY, z], [rx, ry, z], SEC, 1.3);
+    body += oblLine([mx - Math.cos(th2) * 44, hitY + Math.sin(th2) * 22, z], [mx, hitY, z], SEC, 1.25);
+    body += oblLine([mx, hitY, z], [mx - Math.cos(th2) * 44, hitY - Math.sin(th2) * 22, z], SEC, 1.25);
   }
-  const [mlx, mly] = obl(mx + 8, 82, z);
-  body += text(mlx, mly, L(lang, '镜面', 'mirror'), { anchor: 'start', size: 10, fill: MUTED });
-  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
+  body += text(...obl(mx + 12, 8, z), L(lang, '镜面', 'mirror'), { anchor: 'start', size: 10, fill: MUTED });
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
 }
 
 function drawPlaneMirror(lang, step) {
-  // Textbook lab: glass plate + candle A + image ghost + candle B (oblique, spaced).
+  // Textbook: A (lit) | glass | ghost in plate | B (match). Clear gaps, dims on apron.
   const specs = {
-    '-1': { d: 52, h: 30, title: ['探究平面镜成像', 'Plane-mirror imaging'], cap: ['玻璃板、蜡烛 A 与 B', 'Glass plate, candles A and B'] },
-    0: { d: 48, h: 28, title: ['像距 = 物距', 'Image distance = object'], cap: ['A、像、B 到板等远', 'A, image, and B are equidistant'] },
-    1: { d: 48, h: 40, title: ['像高 = 物高', 'Same height'], cap: ['换更高的蜡烛，B 仍重合', 'Taller candle; B still coincides'] },
-    2: { d: 48, h: 28, title: ['左右对调', 'Left-right swap'], cap: ['正立，左右与物对调', 'Erect, left and right swapped'], hands: true },
-    3: { d: 48, h: 28, title: ['光屏接不到', 'Screen misses it'], cap: ['镜后是虚像，屏上无像', 'Virtual; nothing on a screen'], screen: true },
-    4: { d: 78, h: 28, title: ['物距加倍', 'Double the distance'], cap: ['像退后同样距离', 'Image retreats the same distance'] },
+    '-1': { d: 50, h: 30, title: ['探究平面镜成像', 'Plane-mirror imaging'], cap: ['玻璃板、蜡烛 A 与 B', 'Glass plate, candles A and B'] },
+    0: { d: 46, h: 28, title: ['像距 = 物距', 'Image distance = object'], cap: ['A、像、B 到板等远', 'A, image, and B are equidistant'] },
+    1: { d: 46, h: 38, title: ['像高 = 物高', 'Same height'], cap: ['换更高的蜡烛，B 仍重合', 'Taller candle; B still coincides'] },
+    2: { d: 46, h: 28, title: ['左右对调', 'Left-right swap'], cap: ['正立，左右与物对调', 'Erect, left and right swapped'], hands: true },
+    3: { d: 46, h: 28, title: ['光屏接不到', 'Screen misses it'], cap: ['镜后是虚像，屏上无像', 'Virtual; nothing on a screen'], screen: true },
+    4: { d: 70, h: 28, title: ['物距加倍', 'Double the distance'], cap: ['像退后同样距离', 'Image retreats the same distance'] },
   };
   const c = specs[step];
-  const gx = 108;
-  const z0 = 24;
-  const z1 = 56;
+  const gx = 100;
+  const z0 = 26;
+  const z1 = 54;
   const z = 40;
-  // Keep A on-board even when d is large.
-  const aX = Math.max(18, gx - c.d);
-  const bX = Math.min(200, gx + (gx - aX));
-  let body = tableBoard(220, 72);
-  // Back → front: B / ghost, glass, A.
-  if (!c.screen) {
+  const aX = Math.max(22, gx - c.d);
+  const bX = Math.min(190, gx + (gx - aX));
+  let body = tableBoard(210, 70);
+  // Image is behind the glass at bX; B coincides with it when matched.
+  if (c.screen) {
+    body += candle3d(bX, z, { h: c.h, lit: false, ghost: true });
+  } else {
     body += candle3d(bX, z, { h: c.h, lit: false, label: 'B' });
     if (step === -1 || step === 0) {
-      const [x1, y1] = obl(bX + 20, c.h * 0.45, z);
-      const [x2, y2] = obl(bX + 5, c.h * 0.45, z);
-      body += arrow(x1, y1, x2, y2, SEC, 1.4);
+      body += arrow(...obl(bX + 18, c.h * 0.5, z), ...obl(bX + 6, c.h * 0.5, z), SEC, 1.35);
     }
   }
-  body += candle3d(bX, z, { h: c.h, lit: false, ghost: true });
-  body += glassPlate(gx, z0, z1, 70);
-  body += clampBlock(gx, z0 + 2, 'O');
-  body += clampBlock(gx, z1 - 2, "O'");
+  body += glassPlate(gx, z0, z1, 68);
+  body += clampBlock(gx, z0 + 2, '');
+  body += clampBlock(gx, z1 - 2, '');
   body += candle3d(aX, z, { h: c.h, lit: true, label: 'A', thin: c.hands });
   if (c.hands) {
-    body += text(...obl(aX - 9, c.h * 0.55, z), 'L', { size: 10, fill: RAY });
-    body += text(...obl(aX + 9, c.h * 0.55, z), 'R', { size: 10, fill: SEC });
-    body += text(...obl(bX - 9, c.h * 0.55, z), 'R', { size: 10, fill: SEC });
-    body += text(...obl(bX + 9, c.h * 0.55, z), 'L', { size: 10, fill: RAY });
+    body += text(...obl(aX - 10, c.h + 8, z), 'L', { size: 10, fill: RAY });
+    body += text(...obl(aX + 10, c.h + 8, z), 'R', { size: 10, fill: SEC });
+    body += text(...obl(bX - 10, c.h + 8, z), 'R', { size: 10, fill: SEC });
+    body += text(...obl(bX + 10, c.h + 8, z), 'L', { size: 10, fill: RAY });
   }
   if (c.screen) {
-    body += screenOnStand(bX, z, 48);
-    body += text(...obl(bX + 14, 64, z), L(lang, '屏上无像', 'no image'), { anchor: 'start', size: 10, fill: MUTED });
+    body += screenOnStand(Math.min(bX + 20, 188), z, 46);
+    body += text(...obl(Math.min(bX + 34, 198), 58, z), L(lang, '屏上无像', 'no image'), {
+      anchor: 'start', size: 10, fill: MUTED,
+    });
   }
   body += dimFront(aX, gx, L(lang, '物距', 'd'));
   if (!c.screen) body += dimFront(gx, bX, L(lang, '像距', 'd'), SEC);
@@ -1385,19 +1389,31 @@ function drawSpring(lang, step) {
     4: [['提高限度', 'Raise the limit'], ['x 回到限度内，F = kx 恢复', 'x is allowed again, F = kx returns']],
   };
   const [title, cap] = titles[step];
-  const stretch = step === 1 ? 42 : step === 3 ? 58 : 24;
+  const x = step === 1 ? 48 : 28;
   const over = step === 3;
   const kFat = step === 2;
-  const limit = step === 4 ? 62 : 44;
-  let body = tableBoard(220, 72);
-  body += springScale3d(110, 48, stretch, { fat: kFat, limitY: 78 - 14 - limit });
-  body += block3d(102, 40, 16, 12, 14, { y0: 0 });
-  const [lx, ly] = obl(140, 50, 48);
-  body += text(lx, ly, over ? L(lang, '无力', 'no F') : 'F = kx', { anchor: 'start', size: 12, fill: over ? MUTED : RAY });
-  body += text(...obl(70, 78 - 14 - limit, 48), L(lang, '限度', 'limit'), { size: 10, fill: SEC });
-  if (over) body += text(...obl(110, 8, 48), L(lang, '已超出', 'beyond'), { size: 10, fill: RAY });
-  if (kFat) body += text(...obl(40, 50, 48), L(lang, 'k 大', 'large k'), { size: 11, fill: SEC });
-  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
+  const limit = step === 4 ? 68 : 50;
+  const top = 36;
+  const hook = top + 20 + x;
+  const limitY = top + 20 + limit;
+  let body = tableBoard(210, 58);
+  // Scale body (classic textbook front view) above the bench.
+  body += box(132, 30, 40, 100, { fill: PAPER });
+  for (let i = 0; i <= 6; i++) {
+    const yy = 40 + i * 12;
+    body += line(158, yy, i % 2 === 0 ? 168 : 164, yy, MUTED, 1);
+  }
+  body += springV(152, 34, Math.min(hook, 118), kFat ? 8 : 6, kFat ? 8 : 6);
+  body += line(152, Math.min(hook, 120), 152, Math.min(hook + 6, 128), INK, 1.5);
+  body += path(`M 144 ${r(Math.min(hook + 6, 128))} L 160 ${r(Math.min(hook + 6, 128))} L 152 ${r(Math.min(hook + 14, 136))}`, { w: 1.3 });
+  body += dash(110, limitY, 186, limitY, SEC, 1.2);
+  body += text(102, limitY + 3, L(lang, '限度', 'limit'), { anchor: 'end', size: 10, fill: SEC });
+  body += text(200, Math.min(hook, 120) + 4, over ? L(lang, '无力', 'no F') : 'F = kx', {
+    anchor: 'start', size: 12, fill: over ? MUTED : RAY,
+  });
+  if (over) body += text(152, 148, L(lang, '已超出', 'beyond'), { size: 10, fill: RAY });
+  if (kFat) body += text(70, 70, L(lang, 'k 大', 'large k'), { size: 11, fill: SEC });
+  return panel(lang, title[0], title[1], cap[0], cap[1], body);
 }
 
 function frictionBlock3d(x, z, w, h, d, F, f, moving) {
@@ -2191,6 +2207,7 @@ function drawFloat(lang, step) {
 }
 
 function drawCircuit(lang, step) {
+  // Textbook circuit: clean 2D schematic on a note card resting on the table.
   const titles = {
     '-1': [['电路', 'Circuit'], ['电源、开关、用电器', 'Cell, switch, load']],
     0: [['开关', 'Switch'], ['闭合有电流，断开为零', 'Closed: current. Open: zero']],
@@ -2200,38 +2217,69 @@ function drawCircuit(lang, step) {
     4: [['并联', 'Parallel'], ['支路分流', 'Current splits in the branches']],
   };
   const [title, cap] = titles[step];
-  const z = 44;
-  const y = 4;
-  let body = tableBoard(220, 72);
-  body += block3d(36, z - 12, 168, 4, 40, { y0: 0, fill: '#ebe4d6' });
-  const wire = (pts) => oblPathPts(pts.map((p) => [p[0], y, p[1]]), { stroke: INK, w: 1.4 });
-  const mark = (x, zz, label, color = INK) => text(...obl(x, y + 14, zz), label, { size: 10, fill: color });
+  // Bench shelf + classic schematic above it (textbook circuits stay 2D symbols).
+  let body = tableBoard(210, 58);
+  const y = 72;
+  const y2 = 112;
   if (step === 4) {
-    body += wire([[48, z], [72, z], [72, 30], [170, 30], [170, 54], [72, 54], [72, z], [48, z]]);
-    body += wire([[170, 30], [170, 54]]);
-    body += mark(120, 34, 'R₁');
-    body += mark(120, 50, 'R₂');
-    body += wire([[170, 42], [196, 42]]);
-    body += mark(188, 42, 'A', SEC);
-    body += text(...obl(48, 18, z), '+', { size: 11, fill: RAY });
+    body += cellH(40, 58);
+    body += line(46, 58, 80, 58, INK, 1.5);
+    body += line(80, 42, 80, 100, INK, 1.5);
+    body += line(80, 42, 196, 42, INK, 1.5);
+    body += line(80, 100, 196, 100, INK, 1.5);
+    body += resistorH(118, 42, 40);
+    body += resistorH(118, 100, 40);
+    body += text(138, 34, 'R₁', { size: 11 });
+    body += text(138, 92, 'R₂', { size: 11 });
+    body += line(196, 42, 196, 100, INK, 1.5);
+    body += line(196, 71, 236, 71, INK, 1.5);
+    body += meterH(250, 71, 'A');
+    body += line(40, 58, 40, 118, INK, 1.5);
+    body += line(258, 71, 258, 118, INK, 1.5);
+    body += line(40, 118, 258, 118, INK, 1.5);
+    body += text(40, 50, '+', { size: 11, fill: RAY });
   } else if (step === 0) {
-    body += wire([[44, z], [68, z], [100, z], [130, z], [192, z]]);
-    body += mark(78, z, L(lang, 'S', 'S'));
-    body += mark(148, z, L(lang, '灯', 'lamp'), RAY);
-    body += mark(180, z, 'A', SEC);
-    body += mark(88, z + 8, L(lang, '开', 'on'), MUTED);
-    body += text(...obl(130, 28, z + 10), L(lang, '断开 I=0', 'open, I=0'), { size: 10, fill: MUTED });
+    body += cellH(36, y);
+    body += line(42, y, 70, y, INK, 1.5);
+    body += switchH(70, y, true);
+    body += text(84, y - 14, L(lang, '闭合', 'closed'), { size: 10, fill: SEC });
+    body += line(98, y, 140, y, INK, 1.5);
+    body += lampH(156, y);
+    body += text(156, y - 18, L(lang, '灯', 'lamp'), { size: 10, fill: RAY });
+    body += line(166, y, 210, y, INK, 1.5);
+    body += meterH(226, y, 'A');
+    body += text(226, y + 22, 'I', { size: 11, fill: RAY });
+    body += line(36, y, 36, y2, INK, 1.5);
+    body += line(236, y, 236, y2, INK, 1.5);
+    body += line(36, y2, 236, y2, INK, 1.5);
+    body += switchH(70, y2 - 8, false);
+    body += text(150, y2 - 4, L(lang, '断开 I = 0', 'open, I = 0'), { size: 11, fill: MUTED });
   } else {
-    body += wire([[44, z], [68, z], [96, z], [130, z], [step === 2 ? 178 : 166, z], [196, z]]);
-    body += mark(78, z, 'S');
-    body += mark(110, z, 'R₁');
-    if (step === 2) body += mark(152, z, 'Rs', RAY);
-    else body += mark(146, z, 'R₂');
-    body += mark(186, z, L(lang, '灯', 'lamp'), RAY);
-    body += wire([[44, z], [44, z + 18], [196, z + 18], [196, z]]);
-    if (step === 3) body += text(...obl(120, 28, z + 14), 'W , Q', { size: 12, fill: SEC });
+    body += cellH(34, y);
+    body += line(40, y, 64, y, INK, 1.5);
+    body += switchH(64, y, true);
+    body += text(78, y - 14, 'S', { size: 10 });
+    body += line(92, y, 108, y, INK, 1.5);
+    body += resistorH(108, y, 34);
+    body += text(125, y - 14, 'R₁', { size: 11 });
+    body += line(142, y, 156, y, INK, 1.5);
+    if (step === 2) {
+      body += rheostatH(156, y, 48, 0.65);
+      body += text(180, y + 22, 'Rs', { size: 11, fill: RAY });
+    } else {
+      body += resistorH(156, y, 38);
+      body += text(175, y - 14, 'R₂', { size: 11 });
+    }
+    const after = step === 2 ? 204 : 194;
+    body += line(after, y, 220, y, INK, 1.5);
+    body += lampH(236, y);
+    body += text(236, y - 18, L(lang, '灯', 'lamp'), { size: 10, fill: RAY });
+    body += line(34, y, 34, y2, INK, 1.5);
+    body += line(246, y, 246, y2, INK, 1.5);
+    body += line(34, y2, 246, y2, INK, 1.5);
+    if (step === 3) body += text(140, y2 - 8, 'W , Q', { size: 12, fill: SEC });
   }
-  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body);
 }
 
 function drawDensityLab(lang, step) {
@@ -2248,24 +2296,24 @@ function drawDensityLab(lang, step) {
   const dropped = step !== 0 && step !== -1;
   const v1 = step === 4 ? 22 : 28;
   const v2 = dropped ? v1 + (step === 4 ? 30 : 22) : v1;
-  let body = tableBoard(220, 72);
-  body += cylinder3d(70, 48, 18, 78, dropped ? v2 : v1);
-  body += text(...obl(96, v1, 48), 'V₁', { anchor: 'start', size: 11, fill: MUTED });
+  let body = tableBoard(210, 70);
+  body += cylinder3d(70, 42, 16, 58, dropped ? v2 : v1);
+  body += text(...obl(96, v1 + 4, 42), 'V₁', { anchor: 'start', size: 11, fill: MUTED });
   if (dropped) {
-    body += block3d(60, 40, 18, 14, 14, { y0: Math.max(4, v2 - 16) });
-    body += text(...obl(96, v2, 48), 'V₂', { anchor: 'start', size: 11, fill: SEC });
+    body += block3d(60, 34, 16, 12, 12, { y0: Math.max(4, v2 - 14) });
+    body += text(...obl(96, v2 + 4, 42), 'V₂', { anchor: 'start', size: 11, fill: SEC });
   } else {
-    body += block3d(150, 40, 20, 14, 14, { label: L(lang, '样品', 'sample') });
+    body += block3d(140, 36, 18, 12, 12, { label: L(lang, '样品', 'sample') });
   }
-  body += oblPoly3([[160, 0, 30], [220, 0, 30], [220, 28, 30], [160, 28, 30]], { fill: PAPER, w: 1.3 });
-  body += text(...obl(190, 14, 30), 'm', { size: 13 });
+  body += oblPoly3([[145, 0, 22], [195, 0, 22], [195, 22, 22], [145, 22, 22]], { fill: PAPER, w: 1.3 });
+  body += text(...obl(170, 11, 22), 'm', { size: 13 });
   if (step === 2) {
-    body += text(...obl(190, 48, 40), 'V₂−V₁', { size: 11, fill: SEC });
-    body += text(...obl(190, 64, 40), 'ρ', { size: 14, fill: RAY });
+    body += text(...obl(170, 40, 36), 'V₂−V₁', { size: 11, fill: SEC });
+    body += text(...obl(170, 54, 36), 'ρ', { size: 14, fill: RAY });
   }
   if (step === 3) {
-    body += text(...obl(190, 48, 40), 'm/V₂', { size: 12, fill: RAY });
-    body += text(...obl(190, 64, 40), L(lang, '偏小', 'low'), { size: 11, fill: RAY });
+    body += text(...obl(170, 40, 36), 'm/V₂', { size: 12, fill: RAY });
+    body += text(...obl(170, 54, 36), L(lang, '偏小', 'low'), { size: 11, fill: RAY });
   }
   return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }

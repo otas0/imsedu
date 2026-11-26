@@ -11,10 +11,14 @@ const SEC = '#1d4e89';
 const MUTED = '#5e584e';
 const PAPER = '#fffdf8';
 const H = 160;
-const H3 = 188;
-/** Oblique (cabinet) foreshortening — PEP/沪科 lab plates use this depth cue. */
-const OBL_KX = 0.52;
-const OBL_KY = 0.30;
+/** Default Experiment panel height — room for table + caption without stacking. */
+const H3 = 200;
+/** Oblique (cabinet) foreshortening — keep KY mild so depth does not bury labels. */
+const OBL_KX = 0.42;
+const OBL_KY = 0.18;
+/** Table origin in SVG (front-left corner of the board). */
+const OBL_OX = 42;
+const OBL_OY = 148;
 
 function r(n) {
   const v = Math.round(Number(n) * 10) / 10;
@@ -106,13 +110,256 @@ function caption(lang, zh, en, h = H) {
   return text(160, h - 8, L(lang, zh, en), { size: 11, fill: MUTED });
 }
 
-function panel(lang, titleZh, titleEn, capZh, capEn, body, h = H) {
+function panel(lang, titleZh, titleEn, capZh, capEn, body, h = H3) {
   return wrap(heading(lang, titleZh, titleEn) + body + caption(lang, capZh, capEn, h), h);
 }
 
 /** Map lab (x right, y up, z into the table) → SVG. Origin at table front-left. */
-function obl(x, y, z, ox = 36, oy = 158) {
+function obl(x, y, z, ox = OBL_OX, oy = OBL_OY) {
   return [ox + x + z * OBL_KX, oy - y + z * OBL_KY];
+}
+
+/** Dimension along the front apron (z≈0), clear of apparatus. */
+function dimFront(x1, x2, label, color = SEC, z = 2) {
+  const [a, y] = obl(x1, -8, z);
+  const [b] = obl(x2, -8, z);
+  return hDim(a, b, y, label, color);
+}
+
+/** Whiteboard / chart easel standing on the table (face at z−). */
+function chartStand(cx, z, w, h) {
+  const x0 = cx - w / 2;
+  return standPost(x0 + 6, z, 7) + standPost(x0 + w - 6, z, 7) +
+    oblPoly3([[x0, 0, z - 2], [x0 + w, 0, z - 2], [x0 + w, h, z - 2], [x0, h, z - 2]], { fill: '#faf6ee', w: 1.3 }) +
+    oblPoly3([[x0 + w, 0, z - 2], [x0 + w, 0, z + 1], [x0 + w, h, z + 1], [x0 + w, h, z - 2]], { fill: '#ebe4d6', w: 1.1 });
+}
+
+/** Map legacy flat schematic coords onto the chart face in oblique space. */
+function chartMapper(cx, z, w, h, fx0 = 20, fy0 = 32, fx1 = 292, fy1 = 140) {
+  const x0 = cx - w / 2;
+  const map = (fx, fy) => {
+    const lx = ((fx - fx0) / (fx1 - fx0)) * w;
+    const ly = ((fy - fy0) / (fy1 - fy0)) * h;
+    return obl(x0 + lx, Math.max(0, Math.min(h, ly)), z);
+  };
+  const mpoly = (pts, color, wLine, dashPat) => {
+    const out = pts.map((p) => obl(x0 + ((p[0] - fx0) / (fx1 - fx0)) * w, Math.max(0, Math.min(h, ((p[1] - fy0) / (fy1 - fy0)) * h)), z));
+    return polyLine(out.map((p) => [p[0], p[1]]), color, wLine, dashPat);
+  };
+  const mpath = (d, o) => {
+    const toObl = (nums, i) => {
+      if (i % 2 === 0) return r(map(nums[i / 2], nums[i / 2 + 1])[0]);
+      return r(map(nums[(i - 1) / 2], nums[(i - 1) / 2 + 1])[1]);
+    };
+    return path(d.replace(/([\d.]+)\s+([\d.]+)/g, (m, a, b) => {
+      const [ox, oy] = map(Number(a), Number(b));
+      return `${r(ox)} ${r(oy)}`;
+    }), o);
+  };
+  return {
+    map,
+    line: (x1, y1, x2, y2, color = INK, ww = 1.6, dashPat = '') => {
+      const [a, b] = map(x1, y1);
+      const [c, d] = map(x2, y2);
+      return line(a, b, c, d, color, ww, dashPat);
+    },
+    dash: (x1, y1, x2, y2, color = MUTED, ww = 1.2) => {
+      const [a, b] = map(x1, y1);
+      const [c, d] = map(x2, y2);
+      return dash(a, b, c, d, color, ww);
+    },
+    arrow: (x1, y1, x2, y2, color = INK, ww = 1.6) => {
+      const [a, b] = map(x1, y1);
+      const [c, d] = map(x2, y2);
+      return arrow(a, b, c, d, color, ww);
+    },
+    ray: (x1, y1, x2, y2, color = RAY) => {
+      const [a, b] = map(x1, y1);
+      const [c, d] = map(x2, y2);
+      return ray(a, b, c, d, color);
+    },
+    text: (x, y, s, o = {}) => {
+      const [a, b] = map(x, y);
+      return text(a, b, s, o);
+    },
+    box: (x, y, bw, bh, o = {}) => {
+      const z0 = z - 1.5;
+      const lx = x0 + ((x - fx0) / (fx1 - fx0)) * w;
+      const ly = ((y - fy0) / (fy1 - fy0)) * h;
+      const dx = (bw / (fx1 - fx0)) * w;
+      const dy = (bh / (fy1 - fy0)) * h;
+      return oblPoly3([[lx, ly, z0], [lx + dx, ly, z0], [lx + dx, ly + dy, z0], [lx, ly + dy, z0]], {
+        fill: o.fill || 'none', stroke: o.stroke == null ? (o.fill && o.fill !== 'none' ? 'none' : INK) : o.stroke,
+        w: o.w == null ? 1.4 : o.w, op: o.op, dash: o.dash,
+      });
+    },
+    circ: (cx, cy, rad, o = {}) => {
+      const [a, b] = map(cx, cy);
+      return circ(a, b, rad * 0.85, o);
+    },
+    poly: (pts, o = {}) => poly(pts.map((p) => map(p[0], p[1])), o),
+    polyLine: (pts, color = INK, ww = 1.7, dashPat = '') => mpoly(pts, color, ww, dashPat),
+    path: (d, o = {}) => mpath(d, o),
+    axes: (x, yTop, ww, hh) => {
+      const [ax, ay0] = map(x, yTop + hh);
+      const [ax2, ay1] = map(x, yTop);
+      const [bx, by] = map(x + ww, yTop + hh);
+      return arrow(ax, ay0, ax, ay1, INK, 1.35) + arrow(ax, ay0, bx, by, INK, 1.35);
+    },
+    axisLabels: (x, yTop, ww, hh, xlab, ylab) => {
+      const [tx, ty] = map(x + ww + 2, yTop + hh + 4);
+      const [lx, ly] = map(x - 2, yTop + 3);
+      return text(tx, ty, xlab, { anchor: 'start', size: 11, fill: MUTED }) +
+        text(lx, ly, ylab, { anchor: 'end', size: 11, fill: SEC });
+    },
+    hDim: (x1, x2, y, label, color = SEC) => {
+      const [a, b] = map(x1, y);
+      const [c] = map(x2, y);
+      return hDim(a, c, b - 8, label, color);
+    },
+    vDim: (x, y1, y2, label, color = SEC) => {
+      const [a, b] = map(x, y1);
+      const [, d] = map(x, y2);
+      return vDim(a + 6, b, d, label, color);
+    },
+    ground: (x1, x2, y) => {
+      const [a, b] = map(x1, y);
+      const [c, d] = map(x2, y);
+      let s = line(a, b, c, d, INK, 1.8);
+      for (let fx = x1; fx < x2 - 2; fx += 8) {
+        const [p, q] = map(fx, y);
+        s += line(p, q, p - 4, q + 4, INK, 1.1);
+      }
+      return s;
+    },
+    crosses: (x, y, ww, hh, gap) => {
+      const [a, b] = map(x, y);
+      const [c, d] = map(x + ww, y + hh);
+      return crosses(Math.min(a, c), Math.min(b, d), Math.abs(c - a), Math.abs(d - b), gap);
+    },
+    hatchesH: (x1, x2, y, down = true) => {
+      const [a, b] = map(x1, y);
+      const [c, d] = map(x2, y);
+      return hatchesH(a, c, b, down);
+    },
+    hatchesV: (x, y1, y2, right = true) => {
+      const [a, b] = map(x, y1);
+      const [, d] = map(x, y2);
+      return hatchesV(a, b, d, right);
+    },
+    chargeBall: (x, y, sign, rad = 16) => {
+      const [a, b] = map(x, y);
+      return circ(a, b, rad * 0.8, { fill: PAPER, w: 1.4 }) + text(a, b + 4, sign, { size: 12, fill: sign === '+' ? RAY : SEC });
+    },
+    sinePts: (x0, y, ww, amp, cycles, phase = 0, n = 80) => {
+      const pts = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        pts.push([x0 + t * ww, y - amp * Math.sin(phase + t * cycles * Math.PI * 2)]);
+      }
+      return pts;
+    },
+    block: (x, y, bw, bh, o = {}) => {
+      const lx = x0 + ((x - fx0) / (fx1 - fx0)) * w;
+      const ly = ((y - fy0) / (fy1 - fy0)) * h;
+      const dx = (bw / (fx1 - fx0)) * w;
+      const dy = (bh / (fy1 - fy0)) * h;
+      return oblPoly3([[lx, ly, z], [lx + dx, ly, z], [lx + dx, ly + dy, z], [lx, ly + dy, z]], { fill: PAPER, w: 1.3, ...o });
+    },
+    pendulum: (cx, y0, len, angDeg, bob = 7) => {
+      const a = (angDeg * Math.PI) / 180;
+      const [px, py] = map(cx, y0);
+      const [qx, qy] = map(cx + Math.sin(a) * len, y0 + Math.cos(a) * len);
+      return line(px - 10, py, px + 10, py, INK, 1.6) + line(px, py, qx, qy, INK, 1.4) + circ(qx, qy, bob, { fill: PAPER });
+    },
+    springV: (x, y1, y2, amp = 7, turns = 7) => {
+      const n = turns;
+      const dy = (y2 - y1) / n;
+      let d = '';
+      const [sx, sy] = map(x, y1);
+      d += `M ${r(sx)} ${r(sy)}`;
+      for (let i = 0; i < n; i++) {
+        const yy = y1 + dy * i;
+        const side = i % 2 === 0 ? amp : -amp;
+        const [px, py] = map(x + side, yy + dy * 0.5);
+        const [qx, qy] = map(x, yy + dy);
+        d += ` Q ${r(px)} ${r(py)} ${r(qx)} ${r(qy)}`;
+      }
+      return path(d, { w: 1.5 });
+    },
+    piston: (x, y, pw, ph, top) => {
+      const [ax] = map(x, y);
+      const [bx, by] = map(x + pw, y + ph);
+      const [tx] = map(x + pw / 2, top - 14);
+      const [mx, my] = map(x + pw / 2, top);
+      return box(x, y, pw, ph, { fill: 'rgba(180,210,230,0.12)' }) + box(x - 4, top, pw + 8, 8, { fill: PAPER }) + line(tx, my - 14, mx, my, INK, 1.5);
+    },
+    convexLens: (x, top, bot) => {
+      const mid = (top + bot) / 2;
+      const [cx, cy] = map(x, mid);
+      const h = Math.abs(bot - top) / 2;
+      return path(`M ${r(cx)} ${r(cy - h)} Q ${r(cx + 8)} ${r(cy)} ${r(cx)} ${r(cy + h)} Q ${r(cx - 8)} ${r(cy)} ${r(cx)} ${r(cy - h)} Z`, { fill: 'rgba(180,210,230,0.25)', w: 1.6 });
+    },
+    screenPlate: (x, top, bot) => box(x, top, 8, bot - top, { fill: '#f3efe4' }) + hatchesV(map(x + 8, top)[0], map(x + 8, top)[1], map(x + 8, bot)[1], true),
+    beaker: (x, y, bw, bh, level) => {
+      const lx = ((x - fx0) / (fx1 - fx0)) * w + (x0 - (x0));
+      const cx = x0 + ((x + bw / 2 - fx0) / (fx1 - fx0)) * w;
+      const cz = z;
+      const rad = (bw / (fx1 - fx0)) * w * 0.45;
+      const ht = ((bh / (fy1 - fy0)) * h) * 0.9;
+      const lv = level != null ? (level / bh) * ht : null;
+      return beaker3d(cx, cz, Math.max(12, rad), ht, lv);
+    },
+    magnetBar: (x, y, bw, bh, northOnRight) => {
+      const lx = x0 + ((x - fx0) / (fx1 - fx0)) * w;
+      const ly = ((y - fy0) / (fy1 - fy0)) * h;
+      const dx = (bw / (fx1 - fx0)) * w;
+      const dy = (bh / (fy1 - fy0)) * h;
+      const [tx, ty] = map(x + bw / 2, y + bh / 2);
+      let s = oblPoly3([[lx, ly, z], [lx + dx, ly, z], [lx + dx, ly + dy, z], [lx, ly + dy, z]], { fill: northOnRight ? 'rgba(29,78,137,0.14)' : 'rgba(196,73,29,0.14)', w: 1.3 });
+      s += text(tx - dx * 0.25, ty + 3, 'N', { size: 12, fill: RAY });
+      s += text(tx + dx * 0.25, ty + 3, 'S', { size: 12, fill: SEC });
+      return s;
+    },
+  };
+}
+
+function obliqueShown(lang, step, table, draw) {
+  const row = table[step];
+  let body = tableBoard(220, 72);
+  body += chartStand(110, 42, 176, 72);
+  const M = chartMapper(110, 42, 176, 72);
+  body += draw(M);
+  return panel(lang, row[0][0], row[0][1], row[1][0], row[1][1], body, H3);
+}
+
+function oblRay(a, b, color = RAY) {
+  const [x1, y1] = obl(a[0], a[1], a[2]);
+  const [x2, y2] = obl(b[0], b[1], b[2]);
+  return ray(x1, y1, x2, y2, color);
+}
+
+function oblArrow(a, b, color = INK, w = 1.6) {
+  const [x1, y1] = obl(a[0], a[1], a[2]);
+  const [x2, y2] = obl(b[0], b[1], b[2]);
+  return arrow(x1, y1, x2, y2, color, w);
+}
+
+function slitPlate3d(x, z, h = 58, slitY = 30, slitH = 7, double = false) {
+  const z1 = z - 3;
+  const z2 = z + 3;
+  const mid = h / 2;
+  const y1 = double ? slitY - 12 : slitY;
+  const y2 = double ? slitY + 12 : slitY;
+  const face = (sy) => oblPoly3(
+    [[x, 0, z1], [x, h, z1], [x, h, z2], [x, 0, z2], [x, 0, z1], [x, sy - slitH / 2, z1], [x, sy + slitH / 2, z1], [x, h, z1], [x, h, z2], [x, sy + slitH / 2, z2], [x, sy - slitH / 2, z2], [x, 0, z2]],
+    { fill: '#2a2a2a', w: 1.2 },
+  );
+  return (double ? face(y1) + face(y2) : face(y2)) + standPost(x, z, 8);
+}
+
+function parallelPlates3d(x, z, gap, h = 58) {
+  return glassPlate(x, z - 2, z + 2, h) + glassPlate(x + gap, z - 2, z + 2, h);
 }
 
 function oblLine(a, b, color = INK, w = 1.5, dashPat = '') {
@@ -134,34 +381,36 @@ function oblPathPts(pts, o = {}) {
   return path(d, o);
 }
 
-function tableBoard(w = 240, d = 110) {
+function tableBoard(w = 220, d = 72) {
   return oblPoly3([[0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d]], { fill: '#f7f1e6', w: 1.4 }) +
-    oblPoly3([[0, 0, 0], [w, 0, 0], [w, -6, 0], [0, -6, 0]], { fill: '#ebe4d6', w: 1.2 }) +
-    oblPoly3([[w, 0, 0], [w, 0, d], [w, -6, d], [w, -6, 0]], { fill: '#e2d9c8', w: 1.1 });
+    oblPoly3([[0, 0, 0], [w, 0, 0], [w, -5, 0], [0, -5, 0]], { fill: '#ebe4d6', w: 1.2 }) +
+    oblPoly3([[w, 0, 0], [w, 0, d], [w, -5, d], [w, -5, 0]], { fill: '#e2d9c8', w: 1.1 });
 }
 
-function glassPlate(x, z0, z1, h = 78) {
-  // Vertical glass along depth; slight tint like a textbook plate.
+function glassPlate(x, z0, z1, h = 72) {
+  // Vertical glass along a short depth span so the face stays a slim parallelogram.
   const face = oblPoly3(
     [[x, 0, z0], [x, h, z0], [x, h, z1], [x, 0, z1]],
-    { fill: 'rgba(160, 190, 210, 0.22)', w: 1.5 },
+    { fill: 'rgba(160, 190, 210, 0.28)', w: 1.5 },
   );
   const rim = oblLine([x, h, z0], [x, h, z1], INK, 1.3) +
     oblLine([x, 0, z0], [x, h, z0], INK, 1.3) +
-    oblLine([x, 0, z1], [x, h, z1], INK, 1.3);
+    oblLine([x, 0, z1], [x, h, z1], INK, 1.3) +
+    oblLine([x, 0, z0], [x, 0, z1], INK, 1.2);
   return face + rim;
 }
 
 function clampBlock(x, z, label) {
   const s = oblPoly3(
-    [[x - 5, 0, z - 4], [x + 5, 0, z - 4], [x + 5, 8, z - 4], [x - 5, 8, z - 4]],
+    [[x - 4, 0, z - 3], [x + 4, 0, z - 3], [x + 4, 7, z - 3], [x - 4, 7, z - 3]],
     { fill: '#c8c4bc', w: 1.2 },
   ) + oblPoly3(
-    [[x - 5, 0, z - 4], [x - 5, 0, z + 4], [x - 5, 8, z + 4], [x - 5, 8, z - 4]],
+    [[x - 4, 0, z - 3], [x - 4, 0, z + 3], [x - 4, 7, z + 3], [x - 4, 7, z - 3]],
     { fill: '#b4b0a8', w: 1.1 },
   );
-  const [lx, ly] = obl(x, -2, z);
-  return s + text(lx, ly + 12, label, { size: 10, fill: MUTED });
+  if (!label) return s;
+  const [lx, ly] = obl(x, 0, z);
+  return s + text(lx, ly + 14, label, { size: 10, fill: MUTED });
 }
 
 function candle3d(x, z, o = {}) {
@@ -319,6 +568,127 @@ function springScale3d(x, z, stretch, o = {}) {
     const [a, b] = obl(x - 18, o.limitY, z);
     const [c, dd] = obl(x + 18, o.limitY, z);
     s += dash(a, b, c, dd, SEC, 1.1);
+  }
+  return s;
+}
+
+/** Wheel disc in the table plane (axis vertical). */
+function oblWheel(cx, z, rad, y = 12) {
+  const [x, cy] = obl(cx, y, z);
+  let s = `<ellipse cx="${r(x)}" cy="${r(cy)}" rx="${r(rad)}" ry="${r(rad * 0.38)}" fill="${PAPER}" stroke="${INK}" stroke-width="1.4"/>`;
+  s += circ(x, cy, 2.2, { fill: INK, stroke: 'none' });
+  return s;
+}
+
+/** ⊗ markers for uniform B on the table. */
+function oblBField(x0, x1, z0, z1, gap = 16) {
+  let s = '';
+  for (let zz = z0; zz <= z1; zz += gap) {
+    for (let xx = x0; xx <= x1; xx += gap) {
+      const [a, b] = obl(xx, 3, zz);
+      s += line(a - 3, b - 3, a + 3, b + 3, MUTED, 1);
+      s += line(a - 3, b + 3, a + 3, b - 3, MUTED, 1);
+    }
+  }
+  return s;
+}
+
+function chargeBall3d(cx, z, sign, rad = 14) {
+  const col = sign === '−' || sign === '-' ? SEC : RAY;
+  const glyph = sign === '-' ? '−' : sign;
+  const [x, y] = obl(cx, 20, z);
+  return circ(x, y, rad, { fill: PAPER, w: 1.7 }) + text(x, y + 5, glyph, { size: 15, bold: true, fill: col });
+}
+
+/** Low-friction dynamics cart on the table. */
+function cart3d(x, z, w = 48, h = 20, d = 26) {
+  let s = block3d(x, z, w, h, d);
+  const wheel = (wx) => {
+    const [px, py] = obl(wx, 0, z + d * 0.5);
+    return `<ellipse cx="${r(px)}" cy="${r(py + 2)}" rx="5" ry="2.2" fill="${INK}" fill-opacity="0.35" stroke="${INK}" stroke-width="1.1"/>`;
+  };
+  s += wheel(x + 8);
+  s += wheel(x + w - 8);
+  return s;
+}
+
+/** Small graph card (screen-fixed inset beside apparatus). */
+function graphCard(x, y, w, h, inner) {
+  return box(x, y, w, h, { fill: '#faf8f4', w: 1.2 }) + inner;
+}
+
+function oblArrow3d(x1, y1, z1, x2, y2, z2, color = RAY, w = 1.6) {
+  const [a, b] = obl(x1, y1, z1);
+  const [c, d] = obl(x2, y2, z2);
+  return arrow(a, b, c, d, color, w);
+}
+
+/** Tuning fork standing on the table. */
+function fork3d(x, z, h = 28) {
+  const w = 7;
+  let s = oblPoly3([[x - w, 0, z - 3], [x + w, 0, z - 3], [x + w, h, z - 3], [x - w, h, z - 3]], { fill: PAPER, w: 1.3 });
+  s += oblLine([x - w * 0.55, h, z], [x - w * 0.55, h + 20, z], INK, 1.5);
+  s += oblLine([x + w * 0.55, h, z], [x + w * 0.55, h + 20, z], INK, 1.5);
+  s += oblLine([x - w * 0.55, h + 20, z], [x - w * 0.55, h + 6, z + 5], INK, 1.4);
+  s += oblLine([x + w * 0.55, h + 20, z], [x + w * 0.55, h + 6, z + 5], INK, 1.4);
+  return s;
+}
+
+/** Vertical bar magnet lying on the table (long axis +x). */
+function magnetBar3d(x, z, w, h, d, northOnRight) {
+  const nFill = 'rgba(196,73,29,0.18)';
+  const sFill = 'rgba(29,78,137,0.18)';
+  const mid = x + w / 2;
+  let s = oblPoly3([[x, 0, z], [mid, 0, z], [mid, h, z], [x, h, z]], { fill: northOnRight ? sFill : nFill, w: 1.2 });
+  s += oblPoly3([[mid, 0, z], [x + w, 0, z], [x + w, h, z], [mid, h, z]], { fill: northOnRight ? nFill : sFill, w: 1.2 });
+  s += oblPoly3([[x + w, 0, z], [x + w, 0, z + d], [x + w, h, z + d], [x + w, h, z]], { fill: '#e8e2d4', w: 1.1 });
+  const nX = northOnRight ? x + w * 0.75 : x + w * 0.25;
+  const sX = northOnRight ? x + w * 0.25 : x + w * 0.75;
+  s += text(...obl(nX, h + 10, z + d / 2), 'N', { size: 13, bold: true, fill: RAY });
+  s += text(...obl(sX, h + 10, z + d / 2), 'S', { size: 13, bold: true, fill: SEC });
+  return s;
+}
+
+/** Solenoid coil stack on the table (loops in yz plane). */
+function solenoid3d(x0, z, turns, gap, h = 22) {
+  let s = '';
+  for (let i = 0; i < turns; i++) {
+    const cx = x0 + i * gap;
+    const [ex, ey] = obl(cx, h / 2, z);
+    s += `<ellipse cx="${r(ex)}" cy="${r(ey)}" rx="7" ry="${r(h * 0.42)}" fill="${PAPER}" stroke="${INK}" stroke-width="1.35"/>`;
+  }
+  return s;
+}
+
+/** Open-top thermometer on the table. */
+function thermometer3d(x, z, frac, o = {}) {
+  const h = 62;
+  const bulb = 12;
+  let s = oblPoly3([[x - 4, bulb, z], [x + 4, bulb, z], [x + 4, h, z], [x - 4, h, z]], { fill: PAPER, w: 1.4 });
+  const colH = frac * (h - bulb - 4);
+  if (colH > 2) {
+    s += oblPoly3([[x - 2.5, bulb, z], [x + 2.5, bulb, z], [x + 2.5, bulb + colH, z], [x - 2.5, bulb + colH, z]], { fill: RAY, op: 0.5, stroke: 'none' });
+  }
+  const [bx, by] = obl(x, bulb * 0.5, z);
+  s += circ(bx, by, 6, { fill: RAY, op: 0.35, w: 1.2 });
+  for (let i = 0; i <= 4; i++) {
+    const yy = bulb + 6 + i * ((h - bulb - 8) / 4);
+    const [a, b] = obl(x + 4, yy, z);
+    const [c, d] = obl(x + 10, yy, z);
+    s += line(a, b, c, d, MUTED, 1);
+  }
+  if (o.label) s += text(...obl(x, h + 12, z), o.label, { size: 10, fill: MUTED });
+  return s;
+}
+
+/** Ruler flat on the table. */
+function ruler3d(x, z, len, d = 22) {
+  let s = oblPoly3([[x, 0, z], [x + len, 0, z], [x + len, 4, z], [x, 4, z]], { fill: PAPER, w: 1.3 });
+  s += oblPoly3([[x + len, 0, z], [x + len, 0, z + d], [x + len, 4, z + d], [x + len, 4, z]], { fill: '#f0ebe0', w: 1.1 });
+  const div = len > 120 ? 20 : 16;
+  for (let i = 0; i <= len; i += div) {
+    const tick = i % (div * 2) === 0 ? 4 : 2.5;
+    s += oblLine([x + i, 4, z], [x + i, 4 + tick, z], INK, 1);
   }
   return s;
 }
@@ -637,47 +1007,35 @@ function drawConvex(lang, step) {
     5: { title: ['薄透镜方程', 'Thin-lens equation'], cap: ['1/u + 1/v = 1/f', '1/u + 1/v = 1/f'], u: 88, f: 38, law: true },
   };
   const c = cases[step];
-  const z = 44;
-  const lensX = 130;
-  const objX = lensX - c.u;
+  const z = 40;
+  const lensX = 100;
+  const u = Math.min(c.u, 78);
+  const objX = Math.max(16, lensX - u);
   let v = c.v;
   if (v == null && !c.atFocus && !c.virtual) {
-    const inv = 1 / c.f - 1 / c.u;
-    v = inv > 0.001 ? 1 / inv : 120;
+    const inv = 1 / c.f - 1 / u;
+    v = inv > 0.001 ? 1 / inv : 90;
   }
-  const scrX = c.virtual || c.atFocus ? lensX + 110 : lensX + Math.min(v, 120);
-  let body = tableBoard(260, 92);
-  // Optical-bench rail.
-  body += oblPoly3([[20, 2, z - 8], [250, 2, z - 8], [250, 2, z + 8], [20, 2, z + 8]], { fill: '#d8d2c6', w: 1.2 });
-  body += candle3d(objX, z, { h: 26, lit: true, label: L(lang, '物', 'Obj') });
-  body += lensOnStand(lensX, z, 58);
-  const [lx, ly] = obl(lensX, 66, z);
-  body += text(lx, ly - 4, L(lang, '透镜', 'Lens'), { size: 10 });
+  const scrX = Math.min(200, c.virtual || c.atFocus ? lensX + 90 : lensX + Math.min(v, 90));
+  let body = tableBoard(220, 72);
+  body += oblPoly3([[14, 2, z - 6], [206, 2, z - 6], [206, 2, z + 6], [14, 2, z + 6]], { fill: '#d8d2c6', w: 1.2 });
+  body += candle3d(objX, z, { h: 24, lit: true, label: L(lang, '物', 'Obj') });
+  body += lensOnStand(lensX, z, 54);
+  body += text(...obl(lensX, 62, z), L(lang, '透镜', 'Lens'), { size: 10 });
   if (!c.virtual) {
-    body += screenOnStand(scrX, z, c.atFocus ? 48 : 50);
-    const [sx, sy] = obl(scrX, 68, z);
-    body += text(sx + 6, sy, c.atFocus ? L(lang, '无实像', 'no image') : L(lang, '光屏', 'Screen'), {
+    body += screenOnStand(scrX, z, c.atFocus ? 44 : 48);
+    body += text(...obl(scrX + 10, 60, z), c.atFocus ? L(lang, '无实像', 'no image') : L(lang, '光屏', 'Screen'), {
       anchor: 'start', size: 10, fill: c.atFocus ? RAY : SEC,
     });
   } else {
-    body += screenOnStand(scrX, z, 48);
-    const [ix, iy] = obl(lensX - 36, 40, z);
-    body += text(ix, iy, L(lang, '虚像', 'virtual'), { size: 11, fill: SEC });
-    body += dash(...obl(objX, 40, z), ...obl(lensX - 20, 52, z), SEC, 1.2);
+    body += screenOnStand(scrX, z, 44);
+    body += text(...obl(lensX - 28, 42, z), L(lang, '虚像', 'virtual'), { size: 11, fill: SEC });
   }
-  const pO = obl(objX, 0, z);
-  const pL = obl(lensX, 0, z);
-  const pS = obl(scrX, 0, z);
-  body += hDim(pO[0], pL[0], 178, 'u');
-  if (!c.atFocus && !c.virtual) body += hDim(pL[0], pS[0], 178, 'v', SEC);
-  if (c.law) {
-    const pF = obl(lensX + c.f, 0, z);
-    body += hDim(pL[0], pF[0], 168, 'f', RAY);
-  }
-  if (c.prep) {
-    body += oblLine([objX, 40, z], [scrX, 40, z], SEC, 1.1, '4 3');
-  }
-  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
+  body += dimFront(objX, lensX, 'u');
+  if (!c.atFocus && !c.virtual) body += dimFront(lensX, scrX, 'v', SEC);
+  if (c.law) body += dimFront(lensX, lensX + Math.min(c.f, 40), 'f', RAY);
+  if (c.prep) body += oblLine([objX, 36, z], [scrX, 36, z], SEC, 1.1, '4 3');
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
 }
 
 function drawPinhole(lang, step) {
@@ -691,30 +1049,24 @@ function drawPinhole(lang, step) {
     4: { u: 52, v: 96, d: 14, title: ['屏距变大', 'Larger v'], cap: ['光斑变大', 'Spot grows'] },
   };
   const c = specs[step];
-  const z = 44;
-  const plateX = 120;
-  const objX = plateX - c.u;
-  const scrX = plateX + Math.min(c.v, 110);
-  let body = tableBoard(250, 92);
-  body += oblPoly3([[16, 2, z - 8], [240, 2, z - 8], [240, 2, z + 8], [16, 2, z + 8]], { fill: '#d8d2c6', w: 1.2 });
-  body += candle3d(objX, z, { h: 26, lit: true, label: L(lang, '物', 'Obj') });
-  body += pinholeCard(plateX, z - 22, z + 22, 68, Math.max(3, c.d / 2));
-  const [px, py] = obl(plateX, 74, z);
-  body += text(px, py, 'd', { size: 10, fill: MUTED });
-  body += screenOnStand(scrX, z, 50);
-  const [sx, sy] = obl(scrX, 68, z);
-  body += text(sx + 8, sy, c.ideal ? L(lang, '像', 'Img') : L(lang, '光斑', 'spot'), {
+  const z = 40;
+  const plateX = 100;
+  const objX = Math.max(16, plateX - Math.min(c.u, 70));
+  const scrX = Math.min(200, plateX + Math.min(c.v, 90));
+  let body = tableBoard(220, 72);
+  body += oblPoly3([[14, 2, z - 6], [206, 2, z - 6], [206, 2, z + 6], [14, 2, z + 6]], { fill: '#d8d2c6', w: 1.2 });
+  body += candle3d(objX, z, { h: 24, lit: true, label: L(lang, '物', 'Obj') });
+  body += pinholeCard(plateX, z - 18, z + 18, 64, Math.max(3, c.d / 2));
+  body += text(...obl(plateX, 70, z), 'd', { size: 10, fill: MUTED });
+  body += screenOnStand(scrX, z, 48);
+  body += text(...obl(scrX + 10, 60, z), c.ideal ? L(lang, '像', 'Img') : L(lang, '光斑', 'spot'), {
     anchor: 'start', size: 10, fill: SEC,
   });
-  // Ray cue through the hole.
-  body += oblLine([objX, 40, z], [plateX, 34, z], RAY, 1.3);
-  body += oblLine([plateX, 34, z], [scrX, c.ideal ? 24 : 40, z], RAY, 1.3);
-  const pO = obl(objX, 0, z);
-  const pP = obl(plateX, 0, z);
-  const pS = obl(scrX, 0, z);
-  body += hDim(pO[0], pP[0], 178, 'u');
-  body += hDim(pP[0], pS[0], 178, 'v', SEC);
-  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
+  body += oblLine([objX, 36, z], [plateX, 32, z], RAY, 1.3);
+  body += oblLine([plateX, 32, z], [scrX, c.ideal ? 22 : 36, z], RAY, 1.3);
+  body += dimFront(objX, plateX, 'u');
+  body += dimFront(plateX, scrX, 'v', SEC);
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
 }
 
 function drawReflection(lang, step) {
@@ -733,10 +1085,10 @@ function drawReflection(lang, step) {
   const hitY = 36;
   const th = (c.th * Math.PI) / 180;
   const len = 70;
-  let body = tableBoard(250, 100);
-  body += glassPlate(mx, 14, 86, 78);
-  body += clampBlock(mx, 20, '');
-  body += clampBlock(mx, 80, '');
+  let body = tableBoard(220, 72);
+  body += glassPlate(mx, 22, 58, 70);
+  body += clampBlock(mx, 24, '');
+  body += clampBlock(mx, 56, '');
   const [nx1, ny1] = obl(mx, hitY, z);
   const [nx2, ny2] = obl(mx - 50, hitY, z);
   body += dash(nx1, ny1, nx2, ny2, MUTED, 1.1);
@@ -777,58 +1129,51 @@ function drawReflection(lang, step) {
 }
 
 function drawPlaneMirror(lang, step) {
-  // Textbook lab: glass plate + candle A (object) + candle B (image match), oblique view.
+  // Textbook lab: glass plate + candle A + image ghost + candle B (oblique, spaced).
   const specs = {
-    '-1': { d: 48, h: 30, title: ['探究平面镜成像', 'Plane-mirror imaging'], cap: ['玻璃板、蜡烛 A 与 B', 'Glass plate, candles A and B'] },
-    0: { d: 44, h: 28, title: ['像距 = 物距', 'Image distance = object'], cap: ['A、像、B 到板等远', 'A, image, and B are equidistant'] },
-    1: { d: 44, h: 40, title: ['像高 = 物高', 'Same height'], cap: ['换更高的蜡烛，B 仍重合', 'Taller candle; B still coincides'] },
-    2: { d: 44, h: 28, title: ['左右对调', 'Left-right swap'], cap: ['正立，左右与物对调', 'Erect, left and right swapped'], hands: true },
-    3: { d: 44, h: 28, title: ['光屏接不到', 'Screen misses it'], cap: ['镜后是虚像，屏上无像', 'Virtual; nothing on a screen'], screen: true },
-    4: { d: 72, h: 28, title: ['物距加倍', 'Double the distance'], cap: ['像退后同样距离', 'Image retreats the same distance'] },
+    '-1': { d: 52, h: 30, title: ['探究平面镜成像', 'Plane-mirror imaging'], cap: ['玻璃板、蜡烛 A 与 B', 'Glass plate, candles A and B'] },
+    0: { d: 48, h: 28, title: ['像距 = 物距', 'Image distance = object'], cap: ['A、像、B 到板等远', 'A, image, and B are equidistant'] },
+    1: { d: 48, h: 40, title: ['像高 = 物高', 'Same height'], cap: ['换更高的蜡烛，B 仍重合', 'Taller candle; B still coincides'] },
+    2: { d: 48, h: 28, title: ['左右对调', 'Left-right swap'], cap: ['正立，左右与物对调', 'Erect, left and right swapped'], hands: true },
+    3: { d: 48, h: 28, title: ['光屏接不到', 'Screen misses it'], cap: ['镜后是虚像，屏上无像', 'Virtual; nothing on a screen'], screen: true },
+    4: { d: 78, h: 28, title: ['物距加倍', 'Double the distance'], cap: ['像退后同样距离', 'Image retreats the same distance'] },
   };
   const c = specs[step];
-  const gx = 118;
-  const zMid = 48;
-  const aX = gx - c.d;
-  const bX = gx + c.d;
-  let body = tableBoard(250, 100);
-  body += glassPlate(gx, 12, 88, 82);
-  body += clampBlock(gx, 18, 'O');
-  body += clampBlock(gx, 82, "O'");
-  // Draw B (back) before A so A sits in front; ghost image in the plate.
+  const gx = 108;
+  const z0 = 24;
+  const z1 = 56;
+  const z = 40;
+  // Keep A on-board even when d is large.
+  const aX = Math.max(18, gx - c.d);
+  const bX = Math.min(200, gx + (gx - aX));
+  let body = tableBoard(220, 72);
+  // Back → front: B / ghost, glass, A.
   if (!c.screen) {
-    body += candle3d(bX, zMid, { h: c.h, lit: false, label: 'B' });
-    // Motion cue when placing B onto the image (prep / equal-distance steps).
+    body += candle3d(bX, z, { h: c.h, lit: false, label: 'B' });
     if (step === -1 || step === 0) {
-      const [x1, y1] = obl(bX + 22, c.h * 0.5, zMid);
-      const [x2, y2] = obl(bX + 4, c.h * 0.5, zMid);
-      body += arrow(x1, y1, x2, y2, SEC, 1.5);
+      const [x1, y1] = obl(bX + 20, c.h * 0.45, z);
+      const [x2, y2] = obl(bX + 5, c.h * 0.45, z);
+      body += arrow(x1, y1, x2, y2, SEC, 1.4);
     }
   }
-  body += candle3d(gx + 2, zMid, { h: c.h, lit: false, ghost: true });
-  body += candle3d(aX, zMid, { h: c.h, lit: true, label: 'A', thin: c.hands });
+  body += candle3d(bX, z, { h: c.h, lit: false, ghost: true });
+  body += glassPlate(gx, z0, z1, 70);
+  body += clampBlock(gx, z0 + 2, 'O');
+  body += clampBlock(gx, z1 - 2, "O'");
+  body += candle3d(aX, z, { h: c.h, lit: true, label: 'A', thin: c.hands });
   if (c.hands) {
-    const [lx, ly] = obl(aX - 10, c.h * 0.55, zMid);
-    const [rx, ry] = obl(aX + 10, c.h * 0.55, zMid);
-    body += text(lx, ly, 'L', { size: 10, fill: RAY });
-    body += text(rx, ry, 'R', { size: 10, fill: SEC });
-    const [ilx, ily] = obl(gx + 2 - 10, c.h * 0.55, zMid);
-    const [irx, iry] = obl(gx + 2 + 10, c.h * 0.55, zMid);
-    body += text(ilx, ily, 'R', { size: 10, fill: SEC });
-    body += text(irx, iry, 'L', { size: 10, fill: RAY });
+    body += text(...obl(aX - 9, c.h * 0.55, z), 'L', { size: 10, fill: RAY });
+    body += text(...obl(aX + 9, c.h * 0.55, z), 'R', { size: 10, fill: SEC });
+    body += text(...obl(bX - 9, c.h * 0.55, z), 'R', { size: 10, fill: SEC });
+    body += text(...obl(bX + 9, c.h * 0.55, z), 'L', { size: 10, fill: RAY });
   }
   if (c.screen) {
-    body += screenOnStand(bX + 8, zMid, 48);
-    const [sx, sy] = obl(bX + 8, 70, zMid);
-    body += text(sx + 8, sy, L(lang, '屏上无像', 'no image'), { anchor: 'start', size: 10, fill: MUTED });
+    body += screenOnStand(bX, z, 48);
+    body += text(...obl(bX + 14, 64, z), L(lang, '屏上无像', 'no image'), { anchor: 'start', size: 10, fill: MUTED });
   }
-  // Distance marks on the table.
-  const pA = obl(aX, 0, zMid);
-  const pG = obl(gx, 0, zMid);
-  const pB = obl(bX, 0, zMid);
-  body += hDim(pA[0], pG[0], 178, L(lang, '物距', 'd'));
-  if (!c.screen) body += hDim(pG[0], pB[0], 178, L(lang, '像距', 'd'), SEC);
-  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
+  body += dimFront(aX, gx, L(lang, '物距', 'd'));
+  if (!c.screen) body += dimFront(gx, bX, L(lang, '像距', 'd'), SEC);
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
 }
 
 function drawRefraction(lang, step) {
@@ -848,7 +1193,7 @@ function drawRefraction(lang, step) {
   const s2raw = (c.n1 / c.n2) * Math.sin(th);
   const tir = c.tir || (!c.crit && s2raw >= 0.999);
   const s2 = Math.min(1, s2raw);
-  let body = tableBoard(250, 100);
+  let body = tableBoard(220, 72);
   // Flat face of the glass semicircle (interface).
   body += glassPlate(cx, 20, 76, 70);
   body += clampBlock(cx, 26, '');
@@ -894,47 +1239,41 @@ function drawVision(lang, step) {
     4: [['近点改变', 'Near point changes'], ['f > 0，这片不是整个眼球', 'f > 0; the lens is not the whole eye']],
   };
   const [title, cap] = titles[step];
-  const cy = 86;
-  const cx = 214;
-  let body = eyeShell(cx, cy);
-  body += text(cx + 52, cy + 4, L(lang, '视网膜', 'retina'), { size: 9, fill: MUTED });
+  const z = 44;
   const far = step === 1;
   const hyper = step === 3 || step === 4;
-  const finite = step === 2;
+  let body = tableBoard(220, 72);
+  body += oblPoly3([[18, 2, z - 10], [206, 2, z - 10], [206, 2, z + 10], [18, 2, z + 10]], { fill: '#d8d2c6', w: 1.2 });
   if (step === -1) {
-    body += concaveLens(108, cy - 26, cy + 26);
-    body += text(108, cy + 42, L(lang, '凹', 'div'), { size: 10, fill: SEC });
-    body += convexLens(148, cy - 26, cy + 26);
-    body += text(148, cy + 42, L(lang, '凸', 'conv'), { size: 10, fill: RAY });
+    body += lensOnStand(70, z, 48);
+    body += text(...obl(70, 58, z), L(lang, '凹', 'div'), { size: 10, fill: SEC });
+    body += lensOnStand(120, z, 48);
+    body += text(...obl(120, 58, z), L(lang, '凸', 'conv'), { size: 10, fill: RAY });
+    body += oblPoly3([[168, 14, z - 16], [168, 14, z + 16], [168, 46, z + 16], [168, 46, z - 16]], { fill: '#f3efe4', w: 1.4 });
+    body += text(...obl(188, 30, z), L(lang, '眼', 'eye'), { size: 10, fill: MUTED });
     return panel(lang, title[0], title[1], cap[0], cap[1], body);
   }
-  const retinaX = cx + 48;
-  if (!hyper) {
-    const bow = far ? 12 : 7;
-    body += path(`M ${r(78)} ${r(cy - 24)} Q ${r(78 + bow)} ${r(cy)} ${r(78)} ${r(cy + 24)}`, { w: 1.6 }) +
-      path(`M ${r(96)} ${r(cy - 24)} Q ${r(96 - bow)} ${r(cy)} ${r(96)} ${r(cy + 24)}`, { w: 1.6 });
-    body += text(86, 36, far ? L(lang, '度数更高', 'stronger') : L(lang, '凹透镜', 'concave'), { size: 10, fill: SEC });
-  } else {
-    body += convexLens(92, cy - 26, cy + 26);
-    body += text(92, 36, L(lang, '凸透镜', 'convex'), { size: 10, fill: RAY });
-  }
-  body += ray(24, cy - 16, 70, cy - 16, RAY);
-  body += ray(24, cy + 16, 70, cy + 16, RAY);
+  const lensX = hyper ? 62 : 58;
+  body += lensOnStand(lensX, z, 50);
+  body += text(...obl(lensX, 58, z), hyper ? L(lang, '凸透镜', 'convex') : (far ? L(lang, '度数更高', 'stronger') : L(lang, '凹透镜', 'concave')), { size: 10, fill: hyper ? RAY : SEC });
+  body += oblPoly3([[152, 16, z - 18], [152, 16, z + 18], [152, 48, z + 18], [152, 48, z - 18]], { fill: '#f3efe4', w: 1.4 });
+  const [retX, retY] = obl(162, 22, z);
+  body += circ(retX, retY, 2.4, { fill: RAY, stroke: 'none' });
+  body += text(...obl(178, 32, z), L(lang, '视网膜', 'retina'), { anchor: 'start', size: 9, fill: MUTED });
+  const [ox1, oy1] = obl(24, 28, z);
+  const [ix1, iy1] = obl(lensX - 8, 28, z);
+  body += ray(ox1, oy1 - 6, ix1, iy1 - 6, RAY);
+  body += ray(ox1, oy1 + 6, ix1, iy1 + 6, RAY);
+  const [ret2x, ret2y] = obl(162, 32, z);
+  const [lx, ly] = obl(lensX + 8, 32, z);
+  body += ray(lx, ly - 6, ret2x, ret2y, RAY);
+  body += ray(lx, ly + 6, ret2x, ret2y, RAY);
   if (hyper) {
-    // Corrected hyperopia: converging lens puts the image on the retina.
-    body += ray(110, cy - 14, retinaX, cy, RAY);
-    body += ray(110, cy + 14, retinaX, cy, RAY);
-    body += circ(retinaX, cy, 2.4, { fill: RAY, stroke: 'none' });
-    body += text(150, cy - 30, finite ? '' : 'N', { size: 11, fill: SEC });
-    if (step === 4) body += text(150, cy + 28, L(lang, '近点', 'near'), { size: 10, fill: SEC });
+    if (step === 4) body += text(...obl(120, 16, z), L(lang, '近点', 'near'), { size: 10, fill: SEC });
+    else if (step !== 2) body += text(...obl(108, 8, z), 'N', { size: 11, fill: SEC });
   } else {
-    // Corrected myopia: diverging lens puts the far-object image on the retina.
-    body += ray(100, cy - 12, retinaX, cy, RAY);
-    body += ray(100, cy + 12, retinaX, cy, RAY);
-    body += circ(retinaX, cy, 2.4, { fill: RAY, stroke: 'none' });
-    body += text(retinaX - 8, cy - 12, L(lang, '视网膜', 'retina'), { size: 9, fill: RAY });
-    if (finite) body += text(36, cy + 4, 'u', { size: 11, fill: SEC });
-    else body += text(36, cy - 28, L(lang, '远物', 'far'), { size: 10, fill: MUTED });
+    if (step === 2) body += text(...obl(30, 36, z), 'u', { size: 11, fill: SEC });
+    else body += text(...obl(24, 42, z), L(lang, '远物', 'far'), { size: 10, fill: MUTED });
   }
   return panel(lang, title[0], title[1], cap[0], cap[1], body);
 }
@@ -963,7 +1302,7 @@ function drawLever(lang, step) {
   const tiltRad = (spec.tilt * Math.PI) / 180;
   const yL = beamY + Math.sin(tiltRad) * spec.l1;
   const yR = beamY - Math.sin(tiltRad) * spec.l2;
-  let body = tableBoard(240, 96);
+  let body = tableBoard(220, 72);
   body += fulcrum3d(cx, z);
   body += oblLine([cx - spec.l1, yL, z], [cx + spec.l2, yR, z], INK, 3);
   // Hung masses.
@@ -992,39 +1331,47 @@ function drawPulley(lang, step) {
     4: [['增加段数', 'More strands'], ['更省力，绳端移动更远', 'Less force, more rope travel']],
   };
   const [title, cap] = titles[step];
-  let body = line(48, 32, 250, 32, INK, 2.2);
-  body += line(48, 32, 40, 40, INK, 1.2) + line(250, 32, 258, 40, INK, 1.2);
+  const z = 44;
+  let body = tableBoard(220, 72);
+  body += oblLine([22, 66, z], [198, 66, z], INK, 2.2);
+  body += oblLine([22, 66, z], [18, 62, z], INK, 1.2);
+  body += oblLine([198, 66, z], [206, 62, z], INK, 1.2);
   if (n === 2) {
-    body += wheel(146, 52, 15);
-    body += wheel(146, 104, 15);
-    body += path('M 112 32 L 112 104 Q 112 126 146 126 Q 180 126 180 104 L 180 52 Q 180 30 206 34 L 214 78', { stroke: RAY, w: 1.45 });
-    body += arrow(214, 70, 214, 108, RAY, 1.5);
-    body += text(226, 96, 'F', { size: 13, fill: RAY });
-    body += block(124, 124, 44, 14);
-    body += text(146, 135, ideal ? 'G' : 'G+Gp', { size: 11 });
+    body += oblWheel(114, z, 14, 52);
+    body += oblWheel(114, z, 14, 26);
+    body += oblPathPts(
+      [[40, 66, z], [40, 10, z], [114, 10, z], [114, 26, z], [150, 26, z], [150, 52, z], [186, 52, z], [198, 38, z]],
+      { stroke: RAY, w: 1.45 },
+    );
+    body += oblArrow3d(198, 42, z, 198, 18, z, RAY, 1.5);
+    body += text(...obl(210, 28, z), 'F', { anchor: 'start', size: 13, fill: RAY });
+    body += block3d(100, z - 8, 28, 10, 14, { y0: 8, label: ideal ? 'G' : 'G+Gp' });
   } else {
-    body += wheel(120, 50, 12);
-    body += wheel(168, 50, 12);
-    body += wheel(120, 100, 12);
-    body += wheel(168, 100, 12);
-    body += line(96, 32, 96, 100, RAY, 1.35);
-    body += line(132, 62, 132, 88, RAY, 1.35);
-    body += line(156, 62, 156, 88, RAY, 1.35);
-    body += line(192, 62, 192, 118, RAY, 1.35);
-    body += arrow(192, 108, 192, 132, RAY, 1.5);
-    body += text(206, 124, 'F', { size: 13, fill: RAY });
-    body += line(108, 112, 180, 112, INK, 1.4);
-    body += block(118, 116, 52, 12);
-    body += text(144, 126, 'G', { size: 11 });
-    body += text(70, 78, 'n=4', { size: 11, fill: SEC, anchor: 'start' });
+    body += oblWheel(96, z, 11, 50);
+    body += oblWheel(148, z, 11, 50);
+    body += oblWheel(96, z, 11, 22);
+    body += oblWheel(148, z, 11, 22);
+    body += oblLine([76, 66, z], [76, 22, z], RAY, 1.35);
+    body += oblLine([108, 38, z], [108, 30, z], RAY, 1.35);
+    body += oblLine([136, 38, z], [136, 30, z], RAY, 1.35);
+    body += oblLine([168, 38, z], [168, 12, z], RAY, 1.35);
+    body += oblArrow3d(168, 18, z, 168, 4, z, RAY, 1.5);
+    body += text(...obl(180, 8, z), 'F', { anchor: 'start', size: 13, fill: RAY });
+    body += oblLine([100, 12, z], [166, 12, z], INK, 1.4);
+    body += block3d(108, z - 8, 48, 10, 14, { y0: 8, label: 'G' });
+    body += text(...obl(48, 42, z), 'n=4', { size: 11, fill: SEC });
   }
   if (showTravel && n === 2) {
-    body += vDim(248, 78, 118, 's', RAY);
-    body += vDim(96, 108, 128, 'h', SEC);
+    const [a, ay] = obl(196, 20, z);
+    const [b, by] = obl(196, 52, z);
+    body += vDim(a, ay, by, 's', RAY);
+    const [c, cy] = obl(92, 20, z);
+    const [d, dy] = obl(92, 8, z);
+    body += vDim(c, cy, dy, 'h', SEC);
   }
-  if (step === 2) body += text(250, 64, 'η<1', { size: 12, fill: SEC, anchor: 'start' });
-  if (ideal) body += text(250, 64, 'η=1', { size: 12, fill: SEC, anchor: 'start' });
-  if (step === 0) body += text(250, 70, 'n=2', { size: 11, fill: MUTED, anchor: 'start' });
+  if (step === 2) body += text(...obl(200, 58, z), 'η<1', { anchor: 'start', size: 12, fill: SEC });
+  if (ideal) body += text(...obl(200, 58, z), 'η=1', { anchor: 'start', size: 12, fill: SEC });
+  if (step === 0) body += text(...obl(200, 52, z), 'n=2', { anchor: 'start', size: 11, fill: MUTED });
   return panel(lang, title[0], title[1], cap[0], cap[1], body);
 }
 
@@ -1042,7 +1389,7 @@ function drawSpring(lang, step) {
   const over = step === 3;
   const kFat = step === 2;
   const limit = step === 4 ? 62 : 44;
-  let body = tableBoard(220, 90);
+  let body = tableBoard(220, 72);
   body += springScale3d(110, 48, stretch, { fat: kFat, limitY: 78 - 14 - limit });
   body += block3d(102, 40, 16, 12, 14, { y0: 0 });
   const [lx, ly] = obl(140, 50, 48);
@@ -1089,7 +1436,7 @@ function drawFriction(lang, step) {
     4: [['增大质量', 'Larger mass'], ['N = mg 变大，最大摩擦变大', 'N = mg grows, so does friction']],
   };
   const [title, cap] = titles[step];
-  let body = tableBoard(250, 100);
+  let body = tableBoard(220, 72);
   if (step === 3) {
     body += frictionBlock3d(30, 30, 50, 22, 28, 22, 14, true);
     body += frictionBlock3d(140, 30, 80, 16, 40, 22, 14, true);
@@ -1126,7 +1473,7 @@ function drawSolidP(lang, step) {
     4: [['两个面积', 'Two areas'], ['同一 F，p 与 A 成反比', 'Same F, p inverse to A']],
   };
   const [title, cap] = titles[step];
-  let body = tableBoard(250, 100);
+  let body = tableBoard(220, 72);
   const one = (x, z, aw, ah, ad, label) => {
     let s = oblPoly3([[x, 0, z], [x + aw, 0, z], [x + aw, 0, z + ad], [x, 0, z + ad]], { fill: RAY, op: 0.2, w: 1.1 });
     s += block3d(x + aw / 2 - 12, z + 4, 24, ah, Math.min(ad - 8, 20));
@@ -1170,7 +1517,7 @@ function drawLiquidP(lang, step) {
     4: [['连通平衡', 'Connected balance'], ['ρ₁h₁ = ρ₂h₂，ρ₂ 大则 h₂ 小', 'ρ1 h1 = ρ2 h2; larger ρ2, smaller h2']],
   };
   const [title, cap] = titles[step];
-  let body = tableBoard(250, 100);
+  let body = tableBoard(220, 72);
   if (step === 3 || step === 4) {
     const hR = step === 4 ? 22 : 36;
     // U-tube as two cylinders joined by a base channel.
@@ -1235,45 +1582,58 @@ function plateauGraph(lang, step, kind) {
     },
   }[kind][step];
   const titles = pair;
-  const x0 = boil ? 108 : 52;
-  const y0 = 120;
-  const top = 40;
-  let body = axes(x0, top, boil ? 176 : 220, 80);
-  body += axisLabels(x0, top, boil ? 170 : 210, 80, 't', 'T');
-  const late = step === 4;
-  const noPlat = step === 3 && kind === 'melt';
-  let pts;
-  if (noPlat) pts = [[x0, y0], [x0 + 200, top + 8]];
-  else if (late) pts = [[x0, y0], [x0 + 110, 78], [x0 + (boil ? 168 : 210), 78]];
-  else pts = [[x0, y0], [x0 + 58, 78], [x0 + 130, 78], [x0 + (boil ? 168 : 200), 46]];
-  // Melt step 2 is after the plateau; boil/sub step 2 stays on the latent-heat flat.
-  const hi = step === 0 ? [0, 1]
-    : step === 1 ? [1, 2]
-    : step === 2 ? (kind === 'melt' ? [2, 3] : [1, 2])
-    : step === 3 && !noPlat ? (kind === 'melt' ? null : [2, 3])
-    : null;
-  body += polyLine(pts, INK, 1.8);
-  if (hi && pts[hi[1]]) body += polyLine([pts[hi[0]], pts[hi[1]]], RAY, 2.6);
-  if (!noPlat) {
-    body += dash(x0, 78, pts[2][0], 78, SEC, 1);
-    body += text(x0 - 4, 76, names.t, { anchor: 'end', size: 10, fill: SEC });
-  }
-  if (step === 1 || (step === 2 && kind !== 'melt')) {
-    body += text((pts[1][0] + pts[2][0]) / 2, 70, names.a + '→' + names.b, { size: 10, fill: RAY });
-  }
+  const z = 42;
+  let body = tableBoard(220, 72);
   if (boil) {
-    body += beaker(28, 48, 58, 72, 40);
+    body += beaker3d(58, z, 32, 58, 38);
     const bubbles = step === 1 || step === 2 || step === -1 || step === 4;
     if (bubbles) {
-      body += circ(46, 100, 3, { stroke: SEC, w: 1 });
-      body += circ(58, 90, 4, { stroke: SEC, w: 1 });
-      body += circ(50, 78, 2.5, { stroke: SEC, w: 1 });
+      const [b1x, b1y] = obl(52, 28, z);
+      body += circ(b1x, b1y, 3, { stroke: SEC, w: 1 });
+      const [b2x, b2y] = obl(64, 36, z);
+      body += circ(b2x, b2y, 4, { stroke: SEC, w: 1 });
+    }
+    if (step === 0 || step === -1) body += candle3d(90, z, { h: 18, lit: true, thin: true });
+  } else {
+    body += beaker3d(58, z, 30, 54, kind === 'sub' && step !== 3 ? 40 : 32);
+    body += block3d(50, z - 6, 16, 12, 12, { y0: 6, label: kind === 'melt' ? names.a : '' });
+    if (kind === 'melt' && step >= 1 && step !== 3) {
+      body += block3d(50, z - 6, 16, 6, 12, { y0: 0, fill: SEC, label: names.b });
     }
   }
-  if (kind === 'melt' && !noPlat) {
-    body += text(pts[0][0] + 20, 112, names.a, { size: 10, fill: MUTED });
-    if (pts[3]) body += text(pts[3][0] - 10, 58, names.b, { size: 10, fill: SEC });
-  }
+  body += thermometer3d(118, z - 4, step === 3 && kind === 'melt' ? 0.35 : step === 4 ? 0.42 : 0.58);
+  const late = step === 4;
+  const noPlat = step === 3 && kind === 'melt';
+  const gx0 = 162;
+  const gTop = 48;
+  const gH = 76;
+  const gW = 132;
+  body += graphCard(gx0, gTop, gW, gH, (() => {
+    const x0 = gx0 + 14;
+    const y0 = gTop + gH - 8;
+    const top = gTop + 10;
+    let g = axes(x0, top, gW - 28, y0 - top);
+    g += axisLabels(x0, top, gW - 34, y0 - top, 't', 'T');
+    let pts;
+    if (noPlat) pts = [[x0, y0], [x0 + gW - 36, top + 6]];
+    else if (late) pts = [[x0, y0], [x0 + 52, top + 24], [x0 + gW - 36, top + 24]];
+    else pts = [[x0, y0], [x0 + 30, top + 24], [x0 + 72, top + 24], [x0 + gW - 36, top + 10]];
+    const hi = step === 0 ? [0, 1]
+      : step === 1 ? [1, 2]
+      : step === 2 ? (kind === 'melt' ? [2, 3] : [1, 2])
+      : step === 3 && !noPlat ? (kind === 'melt' ? null : [2, 3])
+      : null;
+    g += polyLine(pts, INK, 1.8);
+    if (hi && pts[hi[1]]) g += polyLine([pts[hi[0]], pts[hi[1]]], RAY, 2.6);
+    if (!noPlat && pts[2]) {
+      g += dash(x0, top + 24, pts[2][0], top + 24, SEC, 1);
+      g += text(x0 - 2, top + 22, names.t, { anchor: 'end', size: 10, fill: SEC });
+    }
+    if (step === 1 || (step === 2 && kind !== 'melt')) {
+      g += text((pts[1][0] + pts[2][0]) / 2, top + 16, names.a + '→' + names.b, { size: 9, fill: RAY });
+    }
+    return g;
+  })());
   return panel(lang, titles[0][0], titles[0][1], titles[1][0], titles[1][1], body);
 }
 
@@ -1292,23 +1652,29 @@ function drawSound(lang, step) {
   };
   const [title, cap] = titles[step];
   const cycles = step === 1 ? 4.5 : step === 3 ? 1 : 2.2;
-  const amp = step === 2 ? 32 : 18;
-  let body = fork(48, 58);
+  const amp = step === 2 ? 22 : 12;
+  const z = 40;
+  let body = tableBoard(220, 72);
+  body += fork3d(32, z, 30);
   if (step === 0 || step === -1) {
-    body += dash(58, 78, 78, 78, RAY, 1);
-    body += ray(70, 78, 96, 78, RAY);
+    body += oblArrow3d(44, 28, z + 6, 58, 28, z + 6, RAY, 1.3);
   }
-  const pts = sinePts(108, 86, 190, amp, cycles);
-  body += polyLine(pts, step === 4 ? INK : SEC, 1.7);
-  body += dash(108, 86, 298, 86, MUTED, 1);
-  if (step === 3) {
-    const mid = pts[Math.floor(pts.length / 2)];
-    body += circ(pts[0][0], 86, 2.2, { fill: RAY, stroke: 'none' });
-    body += circ(mid[0], mid[1], 2.2, { fill: RAY, stroke: 'none' });
-    body += circ(pts[pts.length - 1][0], 86, 2.2, { fill: RAY, stroke: 'none' });
-    body += text(150, 86 - amp - 6, 'A', { size: 12, fill: RAY });
-    body += hDim(108, 108 + 190, 128, 'T', SEC);
-  }
+  body += graphCard(118, 42, 178, 88, (() => {
+    const x0 = 128;
+    const y0 = 118;
+    const pts = sinePts(x0, y0, 158, amp, cycles);
+    let g = polyLine(pts, step === 4 ? INK : SEC, 1.7);
+    g += dash(x0, y0, x0 + 158, y0, MUTED, 1);
+    if (step === 3) {
+      const mid = pts[Math.floor(pts.length / 2)];
+      g += circ(pts[0][0], y0, 2.2, { fill: RAY, stroke: 'none' });
+      g += circ(mid[0], mid[1], 2.2, { fill: RAY, stroke: 'none' });
+      g += circ(pts[pts.length - 1][0], y0, 2.2, { fill: RAY, stroke: 'none' });
+      g += text(170, y0 - amp - 6, 'A', { size: 12, fill: RAY });
+      g += hDim(x0, x0 + 158, 132, 'T', SEC);
+    }
+    return g;
+  })());
   if (step === 1) body += text(200, 42, 'f↑', { size: 13, fill: RAY });
   if (step === 2) body += text(200, 42, 'A↑', { size: 13, fill: RAY });
   if (step === 4) body += text(200, 48, L(lang, '单频', 'one f'), { size: 12, fill: SEC });
@@ -1325,37 +1691,48 @@ function drawSt(lang, step) {
     4: [['换速时刻', 'When the speed changes'], ['两段各占多久，总位移跟着变', 'Each segment’s duration changes the net displacement']],
   };
   const [title, cap] = titles[step];
-  const x0 = 48;
+  const z = 44;
+  const cartX = step === 0 ? 46 : 70;
+  let body = tableBoard(220, 72);
+  body += cart3d(cartX, z, 52, 18, 28);
+  body += oblPoly3([[cartX + 56, 12, z - 6], [cartX + 72, 12, z - 6], [cartX + 72, 8, z - 6], [cartX + 56, 8, z - 6]], { fill: '#ddd8ce', w: 1.1 });
+  for (let i = 0; i < 5; i++) {
+    body += oblPoly3([[cartX + 56 + i * 3, 10, z - 5], [cartX + 58 + i * 3, 10, z - 5], [cartX + 58 + i * 3, 6, z - 5], [cartX + 56 + i * 3, 6, z - 5]], { fill: RAY, op: 0.5, stroke: 'none' });
+  }
+  const x0 = 152;
   const y0 = 118;
-  const br = step === 4 ? 150 : 120;
-  let body = axes(x0, 36, 230, 82);
-  body += axisLabels(x0, 36, 224, 82, 't', 's');
-  const y1 = step === 2 ? 70 : 58;
-  const y2 = step === 2 ? 96 : 46;
-  const xEnd = 270;
-  body += polyLine([[x0, y0 - 8], [br, y1], [xEnd, y2]], INK, 1.9);
-  const dotT = step === 0 ? 0.35 : 0.62;
-  const ax = x0 + (br - x0) * Math.min(dotT, 1);
-  let dot;
-  if (ax <= br) {
-    const u = (ax - x0) / (br - x0);
-    dot = [ax, (y0 - 8) + u * (y1 - (y0 - 8))];
-  } else {
-    const u = (ax - br) / (xEnd - br);
-    dot = [ax, y1 + u * (y2 - y1)];
-  }
-  if (step === 0 || step === -1 || step === 3) body += circ(dot[0], dot[1], 4, { fill: RAY, stroke: 'none' });
-  if (step === 1) {
-    body += dash(x0, y0 - 8, br, y0 - 8, MUTED, 1);
-    body += dash(br, y0 - 8, br, y1, MUTED, 1);
-    body += text((x0 + br) / 2, y0 - 16, 'v₁', { size: 11, fill: RAY });
-    body += text((br + xEnd) / 2, Math.min(y1, y2) - 10, 'v₂', { size: 11, fill: SEC });
-  }
-  if (step === 3) {
-    body += dash(x0, y0 - 8, dot[0], dot[1], RAY, 1.3);
-    body += text((x0 + dot[0]) / 2, (y0 + dot[1]) / 2, 'x/t', { size: 11, fill: RAY });
-  }
-  if (step === 4) body += dash(br, 40, br, y0, SEC, 1.2);
+  const br = step === 4 ? 214 : 196;
+  const y1 = step === 2 ? 72 : 60;
+  const y2 = step === 2 ? 96 : 48;
+  const xEnd = 278;
+  body += graphCard(142, 38, 158, 100, (() => {
+    let g = axes(x0, 46, 138, 66);
+    g += axisLabels(x0, 46, 130, 66, 't', 's');
+    g += polyLine([[x0, y0 - 8], [br, y1], [xEnd, y2]], INK, 1.9);
+    const dotT = step === 0 ? 0.35 : 0.62;
+    const ax = x0 + (br - x0) * Math.min(dotT, 1);
+    let dot;
+    if (ax <= br) {
+      const u = (ax - x0) / (br - x0);
+      dot = [ax, (y0 - 8) + u * (y1 - (y0 - 8))];
+    } else {
+      const u = (ax - br) / (xEnd - br);
+      dot = [ax, y1 + u * (y2 - y1)];
+    }
+    if (step === 0 || step === -1 || step === 3) g += circ(dot[0], dot[1], 4, { fill: RAY, stroke: 'none' });
+    if (step === 1) {
+      g += dash(x0, y0 - 8, br, y0 - 8, MUTED, 1);
+      g += dash(br, y0 - 8, br, y1, MUTED, 1);
+      g += text((x0 + br) / 2, y0 - 16, 'v₁', { size: 11, fill: RAY });
+      g += text((br + xEnd) / 2, Math.min(y1, y2) - 10, 'v₂', { size: 11, fill: SEC });
+    }
+    if (step === 3) {
+      g += dash(x0, y0 - 8, dot[0], dot[1], RAY, 1.3);
+      g += text((x0 + dot[0]) / 2, (y0 + dot[1]) / 2, 'x/t', { size: 11, fill: RAY });
+    }
+    if (step === 4) g += dash(br, 50, br, y0, SEC, 1.2);
+    return g;
+  })());
   return panel(lang, title[0], title[1], cap[0], cap[1], body);
 }
 
@@ -1369,34 +1746,40 @@ function drawVt(lang, step) {
     4: [['梯形', 'Trapezoid'], ['½(v₁+v₂)(t₂−t₁)', '½ (v1+v2)(t2−t1)']],
   };
   const [title, cap] = titles[step];
-  const x0 = 52;
+  const z = 44;
+  let body = tableBoard(220, 72);
+  body += cart3d(48, z, 54, 18, 28);
+  body += oblPoly3([[24, 14, z - 8], [70, 14, z - 8], [70, 12, z - 8], [24, 12, z - 8]], { fill: '#c8c4bc', w: 1.2 });
+  const x0 = 152;
   const yBase = step === 2 ? 88 : 118;
-  const top = 36;
-  let body = axes(x0, top, 220, yBase - top);
-  body += axisLabels(x0, top, 214, yBase - top, 't', 'v');
-  // Step 1 parks t₁ at the origin so the shaded area is x(t₂) − x(0).
-  const t1 = x0 + (step === 1 ? 0 : step === 4 ? 36 : 10);
-  const t2 = x0 + 180;
-  const v1 = step === 3 ? yBase - 18 : yBase - 28;
-  const v2 = step === 2 ? yBase + 26 : step === 3 ? yBase - 78 : yBase - 62;
-  if (step === 2) body += dash(x0, yBase, x0 + 210, yBase, MUTED, 1.1);
-  const polyPts = [[t1, yBase], [t1, v1], [t2, v2], [t2, yBase]];
-  if (step === 1 || step === 3 || step === 4 || step === 0) {
-    body += poly(polyPts, { fill: RAY, op: 0.16, stroke: 'none' });
-  }
-  if (step === 2) {
-    const cross = t1 + (t2 - t1) * (yBase - v1) / (v2 - v1);
-    body += poly([[t1, yBase], [t1, v1], [cross, yBase]], { fill: SEC, op: 0.2, stroke: 'none' });
-    body += poly([[cross, yBase], [t2, v2], [t2, yBase]], { fill: RAY, op: 0.2, stroke: 'none' });
-  }
-  body += polyLine([[t1, v1], [t2, v2]], INK, 2);
-  if (step === 0) body += circ(t1 + 70, v1 + (v2 - v1) * 70 / (t2 - t1), 4, { fill: RAY, stroke: 'none' });
-  if (step === 4) {
-    body += dash(t1, v1, t2, v1, SEC, 1.1);
-    body += text((t1 + t2) / 2, Math.min(v1, v2) - 8, L(lang, '梯形', 'trapezoid'), { size: 10, fill: SEC });
-  }
-  body += text(t1, yBase + 14, 't₁', { size: 10, fill: MUTED });
-  body += text(t2, yBase + 14, 't₂', { size: 10, fill: MUTED });
+  const top = 46;
+  body += graphCard(142, 38, 158, 100, (() => {
+    let g = axes(x0, top, 138, yBase - top);
+    g += axisLabels(x0, top, 130, yBase - top, 't', 'v');
+    const t1 = x0 + (step === 1 ? 0 : step === 4 ? 36 : 10);
+    const t2 = x0 + 180;
+    const v1 = step === 3 ? yBase - 18 : yBase - 28;
+    const v2 = step === 2 ? yBase + 26 : step === 3 ? yBase - 78 : yBase - 62;
+    if (step === 2) g += dash(x0, yBase, x0 + 120, yBase, MUTED, 1.1);
+    const polyPts = [[t1, yBase], [t1, v1], [t2, v2], [t2, yBase]];
+    if (step === 1 || step === 3 || step === 4 || step === 0) {
+      g += poly(polyPts, { fill: RAY, op: 0.16, stroke: 'none' });
+    }
+    if (step === 2) {
+      const cross = t1 + (t2 - t1) * (yBase - v1) / (v2 - v1);
+      g += poly([[t1, yBase], [t1, v1], [cross, yBase]], { fill: SEC, op: 0.2, stroke: 'none' });
+      g += poly([[cross, yBase], [t2, v2], [t2, yBase]], { fill: RAY, op: 0.2, stroke: 'none' });
+    }
+    g += polyLine([[t1, v1], [t2, v2]], INK, 2);
+    if (step === 0) g += circ(t1 + 70, v1 + (v2 - v1) * 70 / (t2 - t1), 4, { fill: RAY, stroke: 'none' });
+    if (step === 4) {
+      g += dash(t1, v1, t2, v1, SEC, 1.1);
+      g += text((t1 + t2) / 2, Math.min(v1, v2) - 8, L(lang, '梯形', 'trapezoid'), { size: 10, fill: SEC });
+    }
+    g += text(t1, yBase + 14, 't₁', { size: 10, fill: MUTED });
+    g += text(t2, yBase + 14, 't₂', { size: 10, fill: MUTED });
+    return g;
+  })());
   return panel(lang, title[0], title[1], cap[0], cap[1], body);
 }
 
@@ -1410,44 +1793,51 @@ function drawProjectile(lang, step) {
     4: [['频闪', 'Strobes'], ['水平间隔相等，竖直间隔向下变大', 'Equal horizontal gaps, growing vertical gaps']],
   };
   const [title, cap] = titles[step];
-  // Step 3 is “larger H”: taller table than the baseline 52.
-  const tableH = step === 3 ? 72 : 52;
-  const groundY = 132;
-  const launchY = groundY - tableH;
+  const z = 44;
+  const tableH = step === 3 ? 42 : 30;
   const v0 = step === 2 ? 1.55 : 1;
-  let body = box(28, launchY, 54, tableH, { fill: PAPER });
-  body += ground(24, 300, groundY);
-  const samples = (speed, hDrop, y0) => {
+  const launchX = 52;
+  let body = tableBoard(220, 72);
+  body += block3d(24, z - 6, 30, tableH, 34, { y0: 0 });
+  const samples3d = (speed, hDrop, zL) => {
     const pts = [];
     const n = 16;
     for (let i = 0; i <= n; i++) {
       const u = i / n;
-      pts.push([82 + speed * 150 * u, y0 + hDrop * u * u]);
+      pts.push([launchX + speed * 120 * u, tableH + hDrop * u * u, zL]);
     }
     return pts;
   };
+  const pathSvg = (pts, color, w, dash) => {
+    const svgPts = pts.map((p) => obl(p[0], p[1], p[2]));
+    return polyLine(svgPts, color, w, dash);
+  };
+  const hDrop = step === 3 ? 48 : 36;
   if (step === 2) {
-    body += polyLine(samples(1, tableH, launchY), MUTED, 1.3, '3 3');
-    body += polyLine(samples(v0, tableH, launchY), RAY, 1.8);
+    body += pathSvg(samples3d(1, hDrop, z), MUTED, 1.3, '3 3');
+    body += pathSvg(samples3d(v0, hDrop, z), RAY, 1.8);
   } else if (step === 3) {
-    const baseH = 52;
-    const baseY = groundY - baseH;
-    body += polyLine(samples(1, baseH, baseY), MUTED, 1.3, '3 3');
-    body += polyLine(samples(1, tableH, launchY), RAY, 1.8);
+    body += pathSvg(samples3d(1, 36, z), MUTED, 1.3, '3 3');
+    body += pathSvg(samples3d(1, hDrop, z), RAY, 1.8);
   } else {
-    body += polyLine(samples(v0, tableH, launchY), RAY, 1.8);
+    body += pathSvg(samples3d(v0, hDrop, z), RAY, 1.8);
   }
-  body += arrow(82, launchY, 112, launchY, SEC, 1.5);
-  body += text(118, launchY - 6, 'v₀', { size: 11, fill: SEC });
-  body += vDim(40, launchY, groundY, 'H', SEC);
+  body += oblArrow3d(launchX, tableH, z, launchX + 22, tableH, z, SEC, 1.5);
+  body += text(...obl(launchX + 28, tableH + 6, z), 'v₀', { anchor: 'start', size: 11, fill: SEC });
+  const [v1x, v1y] = obl(38, 0, z);
+  const [v2x, v2y] = obl(38, tableH, z);
+  body += vDim(v1x, v1y, v2y, 'H', SEC);
   if (step === 1 || step === 2 || step === 3) {
-    const xLand = 82 + v0 * 150;
-    body += hDim(82, xLand, groundY - 6, 'x', RAY);
+    const landX = launchX + v0 * 120;
+    body += dimFront(launchX, landX, 'x', RAY);
   }
   if (step === 4 || step === 0 || step === -1) {
     for (let i = 1; i <= 4; i++) {
       const u = i / 5;
-      body += circ(82 + 150 * u, launchY + tableH * u * u, 3.2, { fill: PAPER, stroke: RAY, w: 1.4 });
+      const px = launchX + 120 * u;
+      const py = tableH + hDrop * u * u;
+      const [sx, sy] = obl(px, py, z);
+      body += circ(sx, sy, 3.2, { fill: PAPER, stroke: RAY, w: 1.4 });
     }
   }
   return panel(lang, title[0], title[1], cap[0], cap[1], body);
@@ -1477,7 +1867,7 @@ function drawBalance(lang, step) {
   const tiltRad = (tilt * Math.PI) / 180;
   const yL = beamY + Math.sin(tiltRad) * 72;
   const yR = beamY - Math.sin(tiltRad) * 72;
-  let body = tableBoard(240, 100);
+  let body = tableBoard(220, 72);
   // Column + base.
   body += oblPoly3([[cx - 16, 0, z - 12], [cx + 16, 0, z - 12], [cx + 16, 0, z + 12], [cx - 16, 0, z + 12]], { fill: '#ddd8ce', w: 1.2 });
   body += oblLine([cx, 0, z], [cx, beamY, z], INK, 2.2);
@@ -1516,27 +1906,30 @@ function drawAmpere(lang, step) {
     4: [['电流为零', 'Current is zero'], ['力消失', 'The force vanishes']],
   };
   const [title, cap] = titles[step];
-  const gap = step === 1 ? 11 : 16;
-  const len = step === 2 ? 168 : 112;
-  const x1 = 160 - len / 2;
-  const x2 = 160 + len / 2;
-  const y = 86;
+  const z = 46;
+  const len = step === 2 ? 100 : 72;
+  const cx = 118;
+  const x1 = cx - len / 2;
+  const x2 = cx + len / 2;
+  const y = 12;
   const reverse = step === 3;
-  const fLen = step === 1 || step === 2 ? 40 : 26;
-  let body = crosses(36, 36, 248, 78, gap);
-  body += line(x1, y, x2, y, INK, 2.6);
-  body += hDim(x1, x2, 128, 'L', SEC);
-  body += text(28, 32, step === 1 ? 'B↑' : 'B ⊗', { anchor: 'start', size: 12, fill: MUTED });
+  const fLen = step === 1 || step === 2 ? 28 : 18;
+  let body = tableBoard(220, 72);
+  body += oblBField(28, 190, 28, 56, step === 1 ? 11 : 16);
+  body += text(...obl(30, 52, z), step === 1 ? 'B↑' : 'B ⊗', { anchor: 'start', size: 11, fill: MUTED });
+  body += oblLine([x1, y, z], [x2, y, z], INK, 2.8);
+  body += dimFront(x1, x2, 'L', SEC);
   if (step === 4) {
-    body += text(160, y - 14, 'I = 0', { size: 13, fill: MUTED });
+    body += text(...obl(cx, y + 14, z), 'I = 0', { size: 12, fill: MUTED });
   } else {
     const dir = reverse ? -1 : 1;
-    body += arrow(160 - dir * 28, y, 160 + dir * 36, y, RAY, 1.7);
-    body += text(160, y - 12, 'I', { size: 13, fill: RAY });
-    body += arrow(160, y, 160, y + (reverse ? fLen : -fLen), SEC, 1.9);
-    body += text(174, y + (reverse ? fLen + 4 : -fLen), 'F', { anchor: 'start', size: 13, fill: SEC });
+    body += oblArrow3d(cx - dir * 22, y, z, cx + dir * 28, y, z, RAY, 1.7);
+    body += text(...obl(cx, y + 16, z), 'I', { size: 13, fill: RAY });
+    const fy = reverse ? y + fLen : y - fLen;
+    body += oblArrow3d(cx, y, z, cx, fy, z, SEC, 1.9);
+    body += text(...obl(cx + 16, fy, z), 'F', { anchor: 'start', size: 13, fill: SEC });
   }
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function solenoidCoil(x, y, turns, gap) {
@@ -1557,26 +1950,29 @@ function drawSolenoid(lang, step) {
     4: [['画面匝数', 'Drawn turns'], ['B 由匝密度 n 决定', 'B uses turn density n']],
   };
   const [title, cap] = titles[step];
-  const turns = step === 4 ? 4 : 7;
-  const gap = step === 4 ? 36 : 24;
-  const x = step === 4 ? 78 : 58;
-  const y = 82;
+  const turns = step === 4 ? 5 : 8;
+  const gap = step === 4 ? 18 : 14;
+  const x = step === 4 ? 56 : 38;
+  const z = 44;
   const reverse = step === 2;
   const strong = step === 3;
-  let body = solenoidCoil(x, y, turns, gap);
-  const xL = x + 8;
-  const xR = x + (turns - 1) * gap - 8;
-  if (reverse) body += arrow(xR, y, xL, y, SEC, strong ? 2.4 : 1.8);
-  else body += arrow(xL, y, xR, y, SEC, strong ? 2.4 : 1.8);
-  body += text(reverse ? xL - 8 : xR + 10, y + 4, 'B', { size: 13, fill: SEC, anchor: 'start' });
-  body += text(reverse ? xL : xR, y - 40, 'N', { size: 13, bold: true, fill: RAY });
-  body += text(reverse ? xR : xL, y - 40, 'S', { size: 13, bold: true, fill: SEC });
+  let body = tableBoard(220, 72);
+  body += block3d(30, z - 10, 168, 6, 34, { y0: 0, fill: '#ddd8ce' });
+  body += solenoid3d(x, z, turns, gap, 24);
+  const xL = x + 6;
+  const xR = x + (turns - 1) * gap - 6;
+  if (reverse) body += oblArrow3d(xR, 14, z, xL, 14, z, SEC, strong ? 2.4 : 1.8);
+  else body += oblArrow3d(xL, 14, z, xR, 14, z, SEC, strong ? 2.4 : 1.8);
+  body += text(...obl(reverse ? xL - 6 : xR + 8, 18, z), 'B', { anchor: 'start', size: 13, fill: SEC });
+  body += text(...obl(reverse ? xL : xR, 42, z), 'N', { size: 13, bold: true, fill: RAY });
+  body += text(...obl(reverse ? xR : xL, 42, z), 'S', { size: 13, bold: true, fill: SEC });
   if (step === 1) {
-    body += path(`M ${r(x - 6)} ${r(y + 20)} Q ${r(x - 24)} ${r(y)} ${r(x - 6)} ${r(y - 18)}`, { stroke: RAY, w: 1.4 });
-    body += text(x - 28, y + 4, 'I', { size: 11, fill: RAY });
+    const [ax, ay] = obl(x - 8, 10, z);
+    body += path(`M ${r(ax)} ${r(ay + 14)} Q ${r(ax - 16)} ${r(ay)} ${r(ax)} ${r(ay - 12)}`, { stroke: RAY, w: 1.4 });
+    body += text(...obl(x - 20, 16, z), 'I', { size: 11, fill: RAY });
   }
-  if (step === 4) body += text(160, 132, L(lang, '画出的圈数不是 n', 'drawn loops are not n'), { size: 11, fill: MUTED });
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  if (step === 4) body += text(...obl(160, 8, z), L(lang, '画出的圈数不是 n', 'drawn loops are not n'), { size: 11, fill: MUTED });
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function magnetLoops(x, y, w, h, nSide, count) {
@@ -1605,10 +2001,31 @@ function drawMagnet(lang, step) {
   const [title, cap] = titles[step];
   const northRight = step !== 2;
   const count = step === 1 ? 4 : step === 3 ? 1 : 2;
-  let body = magnetLoops(96, 70, 128, 28, northRight ? 'right' : 'left', count);
-  body += magnetBar(96, 70, 128, 28, northRight);
-  if (step === 4) body += text(160, 132, L(lang, '形状未变', 'shape unchanged'), { size: 11, fill: MUTED });
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  const z = 44;
+  const mx = 54;
+  const mw = 112;
+  let body = tableBoard(220, 72);
+  body += magnetBar3d(mx, z, mw, 14, 28, northRight);
+  const cy = 20;
+  const leave = northRight ? mx + mw : mx;
+  const enter = northRight ? mx : mx + mw;
+  for (let i = 1; i <= count; i++) {
+    const bulge = 8 + i * (count > 3 ? 10 : 14);
+    const [l1x, l1y] = obl(leave, cy - 2, z + 18);
+    const [e1x, e1y] = obl(enter, cy - 2, z + 18);
+    body += path(
+      `M ${r(l1x)} ${r(l1y)} C ${r(l1x + (northRight ? 20 : -20))} ${r(l1y - bulge)}, ${r(e1x + (northRight ? -20 : 20))} ${r(e1y - bulge)}, ${r(e1x)} ${r(e1y)}`,
+      { stroke: SEC, w: 1.2 },
+    );
+    const [l2x, l2y] = obl(leave, cy + 2, z + 18);
+    const [e2x, e2y] = obl(enter, cy + 2, z + 18);
+    body += path(
+      `M ${r(l2x)} ${r(l2y)} C ${r(l2x + (northRight ? 20 : -20))} ${r(l2y + bulge)}, ${r(e2x + (northRight ? -20 : 20))} ${r(e2y + bulge)}, ${r(e2x)} ${r(e2y)}`,
+      { stroke: SEC, w: 1.2 },
+    );
+  }
+  if (step === 4) body += text(...obl(160, 8, z), L(lang, '形状未变', 'shape unchanged'), { size: 11, fill: MUTED });
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawInduction(lang, step) {
@@ -1621,32 +2038,34 @@ function drawInduction(lang, step) {
     4: [['增大电阻', 'Larger R'], ['I = ε/R 变小，ε 不变', 'I = ε/R falls; ε stays']],
   };
   const [title, cap] = titles[step];
-  const y1 = 56;
-  const y2 = 112;
-  const bar = step === 0 ? 150 : 196;
-  const bar2 = step === 0 ? 210 : null;
-  const v = step === 2 ? 0 : step === 1 ? 34 : 20;
-  let body = crosses(44, 44, 230, 84, step === 3 ? 12 : 18);
-  body += line(52, y1, 268, y1, INK, 1.7);
-  body += line(52, y2, 268, y2, INK, 1.7);
-  body += line(52, y1, 52, (y1 + y2) / 2 - 12, INK, 1.7);
-  body += line(52, (y1 + y2) / 2 + 12, 52, y2, INK, 1.7);
-  body += box(40, (y1 + y2) / 2 - 10, 24, 20, { fill: PAPER });
-  body += text(48, (y1 + y2) / 2 + 4, step === 4 ? 'R↑' : 'R', { size: 11, fill: step === 4 ? RAY : INK });
-  body += line(bar, y1, bar, y2, INK, 3);
+  const z = 46;
+  const bar = step === 0 ? 138 : 168;
+  const bar2 = step === 0 ? 188 : null;
+  const v = step === 2 ? 0 : step === 1 ? 26 : 16;
+  let body = tableBoard(220, 72);
+  body += oblBField(36, 200, 30, 56, step === 3 ? 12 : 16);
+  const y1 = 8;
+  const y2 = 32;
+  body += oblLine([32, y1, z], [200, y1, z], INK, 1.7);
+  body += oblLine([32, y2, z], [200, y2, z], INK, 1.7);
+  body += oblLine([32, y1, z], [32, y1 + 8, z], INK, 1.7);
+  body += oblLine([32, y2 - 8, z], [32, y2, z], INK, 1.7);
+  body += block3d(22, z - 8, 16, 16, 14, { y0: y1 + 4, label: step === 4 ? 'R↑' : 'R', labelFill: step === 4 ? RAY : INK });
+  body += oblLine([bar, y1, z], [bar, y2, z], INK, 3);
   if (bar2) {
-    body += dash(bar2, y1, bar2, y2, SEC, 1.4);
-    body += hDim(bar, bar2, 132, 'Δx', SEC);
-    body += text(180, 46, 'Φ', { size: 12, fill: SEC });
+    body += oblLine([bar2, y1, z], [bar2, y2, z], SEC, 1.4, '4 3');
+    body += dimFront(bar, bar2, 'Δx', SEC);
+    body += text(...obl(158, 42, z), 'Φ', { size: 12, fill: SEC });
   }
+  const midY = (y1 + y2) / 2;
   if (v > 0) {
-    body += arrow(bar + 4, (y1 + y2) / 2, bar + 4 + v, (y1 + y2) / 2, RAY, 1.6);
-    body += text(bar + v + 8, (y1 + y2) / 2 - 8, 'v', { anchor: 'start', size: 12, fill: RAY });
+    body += oblArrow3d(bar + 4, midY, z, bar + 4 + v, midY, z, RAY, 1.6);
+    body += text(...obl(bar + v + 10, midY, z), 'v', { anchor: 'start', size: 12, fill: RAY });
   } else {
-    body += text(bar + 8, (y1 + y2) / 2 - 8, 'v = 0', { anchor: 'start', size: 12, fill: MUTED });
+    body += text(...obl(bar + 8, midY, z), 'v = 0', { anchor: 'start', size: 12, fill: MUTED });
   }
-  if (step === 1) body += text(250, 40, 'ε ∝ v', { size: 11, fill: RAY, anchor: 'start' });
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  if (step === 1) body += text(...obl(200, 54, z), 'ε ∝ v', { anchor: 'start', size: 11, fill: RAY });
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawCharges(lang, step) {
@@ -1659,39 +2078,39 @@ function drawCharges(lang, step) {
     4: [['同号与异号', 'Like and unlike'], ['同号相斥，异号相吸', 'Like charges repel, unlike attract']],
   };
   const [title, cap] = titles[step];
-  let body = '';
-  const pair = (x, y, s1, s2, dist, fLen, flip) => {
-    let s = chargeBall(x, y, s1) + chargeBall(x + dist, y, s2);
+  const zBase = 44;
+  let body = tableBoard(220, 72);
+  const pair = (x, z, s1, s2, dist, fLen, flip) => {
+    let s = chargeBall3d(x, z, s1) + chargeBall3d(x + dist, z, s2);
     const leftOut = s1 === s2;
     const a = leftOut ? -1 : 1;
     const dir = flip ? -a : a;
-    s += arrow(x + 20, y, x + 20 + dir * fLen, y, RAY, 1.6);
-    s += arrow(x + dist - 20, y, x + dist - 20 - dir * fLen, y, RAY, 1.6);
-    s += hDim(x, x + dist, y + 36, 'r', SEC);
+    s += oblArrow3d(x + 16, 20, z, x + 16 + dir * fLen, 20, z, RAY, 1.6);
+    s += oblArrow3d(x + dist - 16, 20, z, x + dist - 16 - dir * fLen, 20, z, RAY, 1.6);
+    s += dimFront(x, x + dist, 'r', SEC);
     return s;
   };
   if (step === 4) {
-    body += pair(36, 70, '+', '+', 86, 16, false);
-    body += pair(176, 70, '+', '−', 86, 16, false);
-    body += text(78, 118, L(lang, '斥', 'repel'), { size: 11, fill: RAY });
-    body += text(220, 118, L(lang, '吸', 'attract'), { size: 11, fill: SEC });
+    body += pair(30, zBase, '+', '+', 70, 14, false);
+    body += pair(150, zBase, '+', '−', 70, 14, false);
+    body += text(...obl(68, 42, zBase), L(lang, '斥', 'repel'), { size: 11, fill: RAY });
+    body += text(...obl(186, 42, zBase), L(lang, '吸', 'attract'), { size: 11, fill: SEC });
   } else if (step === 2) {
-    body += pair(40, 48, '+', '+', 72, 20, false);
-    body += text(250, 52, 'F', { anchor: 'start', size: 12, fill: RAY });
-    body += pair(40, 108, '+', '+', 144, 8, false);
-    body += text(250, 112, 'F/4', { anchor: 'start', size: 12, fill: RAY });
-    body += text(160, 84, L(lang, 'r → 2r', 'r → 2r'), { size: 11, fill: MUTED });
+    body += pair(34, 30, '+', '+', 58, 16, false);
+    body += text(...obl(200, 28, 30), 'F', { anchor: 'start', size: 12, fill: RAY });
+    body += pair(34, 52, '+', '+', 116, 6, false);
+    body += text(...obl(200, 50, 52), 'F/4', { anchor: 'start', size: 12, fill: RAY });
+    body += text(...obl(120, 40, 42), L(lang, 'r → 2r', 'r → 2r'), { size: 11, fill: MUTED });
   } else if (step === 3) {
-    // Flip one sign: unlike → attract, then same sign → repel (force reverses).
-    body += pair(40, 48, '+', '−', 100, 18, false);
-    body += text(250, 52, L(lang, '吸', 'attract'), { anchor: 'start', size: 11, fill: SEC });
-    body += pair(40, 108, '−', '−', 100, 18, false);
-    body += text(250, 112, L(lang, '斥', 'repel'), { anchor: 'start', size: 11, fill: RAY });
-    body += text(160, 84, L(lang, '改 q₁ 符号', 'flip q₁'), { size: 11, fill: MUTED });
+    body += pair(34, 30, '+', '−', 82, 16, false);
+    body += text(...obl(200, 28, 30), L(lang, '吸', 'attract'), { anchor: 'start', size: 11, fill: SEC });
+    body += pair(34, 52, '−', '−', 82, 16, false);
+    body += text(...obl(200, 50, 52), L(lang, '斥', 'repel'), { anchor: 'start', size: 11, fill: RAY });
+    body += text(...obl(120, 40, 42), L(lang, '改 q₁ 符号', 'flip q₁'), { size: 11, fill: MUTED });
   } else {
-    body += pair(70, 78, '+', step === 0 ? '+' : '−', step === 0 ? 100 : 110, 20, false);
+    body += pair(60, zBase, '+', step === 0 ? '+' : '−', step === 0 ? 88 : 96, 16, false);
   }
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function submergedBlock(bx, liquidTop, liquidBot, frac, label) {
@@ -1720,7 +2139,7 @@ function drawArchimedes(lang, step) {
   const frac = step === 2 || step === 3 || step === 4 ? 1 : step === -1 ? 0.7 : 0.55;
   const level = step === 3 ? 58 : 48;
   const catchH = 14 + Math.round(frac * 28);
-  let body = tableBoard(250, 100);
+  let body = tableBoard(220, 72);
   body += beaker3d(70, 42, 36, 70, level, { spout: true });
   body += block3d(58, 34, 22, 16, 16, { y0: Math.max(4, level - frac * 22), label: step === 2 ? 'V' : '' });
   body += cylinder3d(170, 50, 16, 58, catchH);
@@ -1747,7 +2166,7 @@ function drawFloat(lang, step) {
   };
   const [title, cap] = titles[step];
   const z = 48;
-  let body = tableBoard(240, 100);
+  let body = tableBoard(220, 72);
   body += beaker3d(110, z, 48, 72, 44);
   if (step === 3) {
     body += oblPoly3([[80, 36, z - 10], [140, 36, z - 10], [132, 22, z + 10], [88, 22, z + 10]], { fill: PAPER, w: 1.5 });
@@ -1781,59 +2200,38 @@ function drawCircuit(lang, step) {
     4: [['并联', 'Parallel'], ['支路分流', 'Current splits in the branches']],
   };
   const [title, cap] = titles[step];
-  const y = 78;
-  let body = '';
+  const z = 44;
+  const y = 4;
+  let body = tableBoard(220, 72);
+  body += block3d(36, z - 12, 168, 4, 40, { y0: 0, fill: '#ebe4d6' });
+  const wire = (pts) => oblPathPts(pts.map((p) => [p[0], y, p[1]]), { stroke: INK, w: 1.4 });
+  const mark = (x, zz, label, color = INK) => text(...obl(x, y + 14, zz), label, { size: 10, fill: color });
   if (step === 4) {
-    body += cellH(40, 70);
-    body += line(46, 70, 80, 70, INK, 1.5);
-    body += line(80, 48, 80, 108, INK, 1.5);
-    body += line(80, 48, 200, 48, INK, 1.5);
-    body += line(80, 108, 200, 108, INK, 1.5);
-    body += resistorH(120, 48, 40);
-    body += resistorH(120, 108, 40);
-    body += text(140, 40, 'R₁', { size: 11 });
-    body += text(140, 100, 'R₂', { size: 11 });
-    body += line(200, 48, 200, 108, INK, 1.5);
-    body += line(200, 78, 250, 78, INK, 1.5);
-    body += meterH(236, 78, 'A');
-    body += line(250, 78, 250, 120, INK, 1.5);
-    body += line(40, 70, 40, 120, INK, 1.5);
-    body += line(40, 120, 250, 120, INK, 1.5);
-    body += text(40, 64, '+', { size: 11, fill: RAY });
+    body += wire([[48, z], [72, z], [72, 30], [170, 30], [170, 54], [72, 54], [72, z], [48, z]]);
+    body += wire([[170, 30], [170, 54]]);
+    body += mark(120, 34, 'R₁');
+    body += mark(120, 50, 'R₂');
+    body += wire([[170, 42], [196, 42]]);
+    body += mark(188, 42, 'A', SEC);
+    body += text(...obl(48, 18, z), '+', { size: 11, fill: RAY });
   } else if (step === 0) {
-    body += cellH(36, y);
-    body += line(42, y, 78, y, INK, 1.5);
-    body += switchH(78, y, true);
-    body += line(106, y, 150, y, INK, 1.5);
-    body += lampH(166, y);
-    body += line(176, y, 230, y, INK, 1.5);
-    body += meterH(214, y, 'A');
-    body += text(214, y + 28, 'I', { size: 11, fill: RAY });
-    body += switchH(78, y + 48, false);
-    body += text(150, y + 52, L(lang, '断开 I=0', 'open, I=0'), { size: 11, fill: MUTED });
+    body += wire([[44, z], [68, z], [100, z], [130, z], [192, z]]);
+    body += mark(78, z, L(lang, 'S', 'S'));
+    body += mark(148, z, L(lang, '灯', 'lamp'), RAY);
+    body += mark(180, z, 'A', SEC);
+    body += mark(88, z + 8, L(lang, '开', 'on'), MUTED);
+    body += text(...obl(130, 28, z + 10), L(lang, '断开 I=0', 'open, I=0'), { size: 10, fill: MUTED });
   } else {
-    body += cellH(34, y);
-    body += line(40, y, 70, y, INK, 1.5);
-    body += switchH(70, y, true);
-    body += line(98, y, 112, y, INK, 1.5);
-    body += resistorH(112, y, 36);
-    body += text(130, y - 16, 'R₁', { size: 11 });
-    body += line(148, y, 164, y, INK, 1.5);
-    if (step === 2) {
-      body += rheostatH(164, y, 52, 0.7);
-      body += text(190, y + 24, 'Rs', { size: 11, fill: RAY });
-    } else {
-      body += resistorH(164, y, 40);
-      body += text(184, y - 16, 'R₂', { size: 11 });
-    }
-    body += line(step === 2 ? 216 : 204, y, 236, y, INK, 1.5);
-    body += lampH(248, y);
-    body += line(34, y, 34, 120, INK, 1.5);
-    body += line(258, y, 258, 120, INK, 1.5);
-    body += line(34, 120, 258, 120, INK, 1.5);
-    if (step === 3) body += text(160, 112, 'W , Q', { size: 12, fill: SEC });
+    body += wire([[44, z], [68, z], [96, z], [130, z], [step === 2 ? 178 : 166, z], [196, z]]);
+    body += mark(78, z, 'S');
+    body += mark(110, z, 'R₁');
+    if (step === 2) body += mark(152, z, 'Rs', RAY);
+    else body += mark(146, z, 'R₂');
+    body += mark(186, z, L(lang, '灯', 'lamp'), RAY);
+    body += wire([[44, z], [44, z + 18], [196, z + 18], [196, z]]);
+    if (step === 3) body += text(...obl(120, 28, z + 14), 'W , Q', { size: 12, fill: SEC });
   }
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawDensityLab(lang, step) {
@@ -1850,7 +2248,7 @@ function drawDensityLab(lang, step) {
   const dropped = step !== 0 && step !== -1;
   const v1 = step === 4 ? 22 : 28;
   const v2 = dropped ? v1 + (step === 4 ? 30 : 22) : v1;
-  let body = tableBoard(250, 100);
+  let body = tableBoard(220, 72);
   body += cylinder3d(70, 48, 18, 78, dropped ? v2 : v1);
   body += text(...obl(96, v1, 48), 'V₁', { anchor: 'start', size: 11, fill: MUTED });
   if (dropped) {
@@ -1886,27 +2284,33 @@ function drawAc(lang, step) {
     3: [['只改变 f', 'Change f only'], ['波形变密，有效值不变', 'Tighter wave, same rms']],
     4: [['只改变 Vm', 'Change Vm only'], ['电压有效值单独核对', 'Check voltage rms on its own']],
   }, () => {
+    const z = 44;
+    let s = tableBoard(220, 72);
+    s += block3d(50, z - 10, 56, 28, 32, { y0: 0, label: L(lang, '源', 'source') });
     const y = 86;
     const amp = step === 2 ? 34 : 20;
     const cycles = step === 3 ? 4 : 1.25;
-    let s = dash(36, y, 300, y, MUTED, 1);
-    if (step === 4) {
-      s += polyLine(sinePts(36, 70, 250, 16, 1.25), MUTED, 1.2, '4 3');
-      s += polyLine(sinePts(36, 102, 250, 28, 1.25), RAY, 1.8);
-      s += text(40, 58, 'Im', { anchor: 'start', size: 10, fill: MUTED });
-      s += text(40, 128, 'Vm', { anchor: 'start', size: 11, fill: RAY });
-      return s;
-    }
-    s += polyLine(sinePts(36, y, 250, amp, cycles), INK, 1.7);
-    const rms = amp / Math.SQRT2;
-    if (step === 1 || step === 2 || step === -1) {
-      s += dash(36, y - rms, 286, y - rms, SEC, 1.2);
-      s += text(292, y - rms + 3, 'rms', { anchor: 'start', size: 10, fill: SEC });
-    }
-    if (step === 0) {
-      s += text(120, y - amp - 4, '+', { size: 12, fill: RAY });
-      s += text(200, y + amp + 12, '−', { size: 12, fill: SEC });
-    }
+    s += graphCard(118, 42, 178, 88, (() => {
+      let g = dash(128, y, 286, y, MUTED, 1);
+      if (step === 4) {
+        g += polyLine(sinePts(128, 70, 158, 16, 1.25), MUTED, 1.2, '4 3');
+        g += polyLine(sinePts(128, 102, 158, 28, 1.25), RAY, 1.8);
+        g += text(132, 58, 'Im', { anchor: 'start', size: 10, fill: MUTED });
+        g += text(132, 128, 'Vm', { anchor: 'start', size: 11, fill: RAY });
+        return g;
+      }
+      g += polyLine(sinePts(128, y, 158, amp, cycles), INK, 1.7);
+      const rms = amp / Math.SQRT2;
+      if (step === 1 || step === 2 || step === -1) {
+        g += dash(128, y - rms, 278, y - rms, SEC, 1.2);
+        g += text(282, y - rms + 3, 'rms', { anchor: 'start', size: 10, fill: SEC });
+      }
+      if (step === 0) {
+        g += text(180, y - amp - 4, '+', { size: 12, fill: RAY });
+        g += text(240, y + amp + 12, '−', { size: 12, fill: SEC });
+      }
+      return g;
+    })());
     return s;
   });
 }
@@ -1921,7 +2325,7 @@ function drawAtmosphere(lang, step) {
     4: [['半球', 'Hemispheres'], ['分离力 P·πr²，r 加倍力变 4 倍', 'Separating force P·πr²']],
   };
   const [title, cap] = titles[step];
-  let body = tableBoard(250, 100);
+  let body = tableBoard(220, 72);
   if (step === 4) {
     const [c1x, c1y] = obl(80, 36, 48);
     const [c2x, c2y] = obl(160, 36, 48);
@@ -1943,14 +2347,15 @@ function drawAtmosphere(lang, step) {
 }
 
 function drawLevels(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['能级', 'Energy levels'], ['束缚能级按 1/n² 排布', 'Bound levels follow 1/n²']],
     0: [['落到 n=1', 'Down to n = 1'], ['读能级差，即光子能量', 'The gap is the photon energy']],
     1: [['吸收与放出', 'Absorb or emit'], ['向上是吸收，向下是放出', 'Up absorbs, down emits']],
     2: [['间隔变密', 'Gaps tighten'], ['越高的能级靠得越近', 'Higher levels sit closer']],
     3: [['同一能级', 'Same level'], ['光子能量为 0', 'Photon energy is 0']],
     4: [['1/n²', '1/n²'], ['能量为负，表示束缚', 'Negative energy means bound']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const ys = [120, 86, 66, 54, 46];
     let s = '';
     ys.forEach((y, i) => {
@@ -1973,14 +2378,15 @@ function drawLevels(lang, step) {
 }
 
 function drawTunnel(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['势垒', 'Barrier'], ['高度 V₀，宽度 a', 'Height V0, width a']],
     0: [['E < V₀', 'E below V0'], ['波函数渗过势垒', 'The wave leaks through']],
     1: [['隧穿概率', 'Tunnel probability'], ['T 随 κ 与 a 变化', 'T depends on κ and a']],
     2: [['加宽势垒', 'Wider barrier'], ['同一能量下 T 下降', 'T falls at the same energy']],
     3: [['E > V₀', 'E above V0'], ['出现共振峰', 'Resonance peaks appear']],
     4: [['靠近峰', 'Near a peak'], ['T 接近峰值', 'T approaches the peak']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const wide = step === 2;
     const x1 = wide ? 110 : 130;
     const x2 = wide ? 230 : 190;
@@ -2007,14 +2413,15 @@ function drawTunnel(lang, step) {
 }
 
 function drawBeats(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['拍', 'Beats'], ['两个靠近的频率', 'Two close frequencies']],
     0: [['包络', 'Envelope'], ['振幅一起一伏', 'The amplitude swells and fades']],
     1: [['拍频', 'Beat frequency'], ['Δf = |f₁ − f₂|', 'Δf = |f1 − f2|']],
     2: [['频率靠近', 'Closer frequencies'], ['拍变慢', 'The beat slows']],
     3: [['频率拉远', 'Frequencies apart'], ['拍变快', 'The beat quickens']],
     4: [['只改变 A', 'Change A only'], ['拍频不变，包络变高', 'Beat rate fixed, envelope taller']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const beats = step === 2 ? 1 : step === 3 ? 3 : 1.6;
     const amp = step === 4 ? 30 : 16;
     const y = 88;
@@ -2030,14 +2437,15 @@ function drawBeats(lang, step) {
 }
 
 function drawBell(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['关联', 'Correlation'], ['两个测量角 α、β', 'Two measurement angles α, β']],
     0: [['α = β', 'α = β'], ['关联 −1，异号占满', 'Correlation −1, unlike outcomes fill it']],
     1: [['相差 90°', '90° apart'], ['关联为 0', 'Correlation is 0']],
     2: [['相差 180°', '180° apart'], ['关联 +1，同号占满', 'Correlation +1, like outcomes fill it']],
     3: [['扫描 β', 'Sweep β'], ['关联沿 −cos(α−β)', 'Correlation follows −cos(α−β)']],
     4: [['同号与异号', 'Like and unlike'], ['份额随角度差，不随单角', 'Shares follow the difference']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = circ(90, 86, 28, { fill: PAPER });
     s += circ(210, 86, 28, { fill: PAPER });
     const ang = step === 1 ? 90 : step === 2 ? 180 : step === 3 ? 50 : 0;
@@ -2064,22 +2472,27 @@ function drawBernoulli(lang, step) {
     3: [['公式前提失败', 'Formula premise fails'], ['P₂ 出现负值就超出前提', 'A negative P2 is outside the premise']],
     4: [['机翼', 'Wing'], ['升力来自同一 ½ρΔ(v²)', 'Lift uses the same ½ρΔ(v²)']],
   }, () => {
+    const z = 44;
+    let s = tableBoard(220, 72);
     if (step === 4) {
-      let s = path('M 40 96 Q 120 70 200 88 Q 250 96 280 90 L 250 100 Q 160 108 40 100 Z', { fill: PAPER, w: 1.6 });
-      s += polyLine(sinePts(30, 70, 250, 4, 2), SEC, 1.2);
-      s += ray(36, 78, 120, 74, SEC);
-      s += text(160, 64, 'v↑', { size: 12, fill: RAY });
-      s += arrow(160, 112, 160, 96, RAY, 1.6);
+      s += oblPoly3([[36, 10, z - 6], [110, 26, z], [180, 14, z + 6], [170, 6, z + 4], [100, 12, z], [36, 8, z - 4]], { fill: PAPER, w: 1.6 });
+      const pts = sinePts(40, 20, 160, 4, 2).map((p) => obl(p[0] - 20, p[1] * 0.15 + 18, z));
+      s += polyLine(pts, SEC, 1.2);
+      s += oblArrow3d(120, 24, z, 150, 22, z, RAY, 1.4);
+      s += text(...obl(140, 38, z), 'v↑', { size: 12, fill: RAY });
+      s += oblArrow3d(140, 8, z, 140, 18, z, RAY, 1.6);
       return s;
     }
-    const neck = step === 2 ? 18 : 32;
-    let s = path(`M 30 50 L 110 50 L 150 ${r(78 - neck / 2)} L 230 ${r(78 - neck / 2)} L 270 50`, { w: 1.6 });
-    s += path(`M 30 118 L 110 118 L 150 ${r(78 + neck / 2)} L 230 ${r(78 + neck / 2)} L 270 118`, { w: 1.6 });
-    s += arrow(50, 84, 90, 84, SEC, 1.5);
-    s += arrow(170, 78, 210, 78, RAY, 1.6);
-    s += text(70, 44, 'A₁', { size: 11 });
-    s += text(180, 44, 'A₂', { size: 11, fill: RAY });
-    if (step === 3) s += text(180, 132, 'P₂ < 0', { size: 12, fill: RAY });
+    const neck = step === 2 ? 10 : 18;
+    const yTop = 18;
+    const yBot = 6;
+    s += oblPathPts([[28, yTop, z], [100, yTop, z], [130, yTop - neck / 2, z], [200, yTop - neck / 2, z], [220, yTop, z]], { w: 1.6 });
+    s += oblPathPts([[28, yBot, z], [100, yBot, z], [130, yBot + neck / 2, z], [200, yBot + neck / 2, z], [220, yBot, z]], { w: 1.6 });
+    s += oblArrow3d(48, 12, z, 82, 12, z, SEC, 1.5);
+    s += oblArrow3d(150, 14, z, 190, 14, z, RAY, 1.6);
+    s += text(...obl(64, 24, z), 'A₁', { size: 11 });
+    s += text(...obl(168, 24, z), 'A₂', { size: 11, fill: RAY });
+    if (step === 3) s += text(...obl(168, 2, z), 'P₂ < 0', { size: 12, fill: RAY });
     return s;
   });
 }
@@ -2094,13 +2507,18 @@ function drawBuoyOrigin(lang, step) {
     4: [['边长或密度', 'Size or density'], ['全浸时 Fb 正比于体积和 ρ', 'When covered, Fb scales with volume and ρ']],
   }, () => {
     const sunk = step !== 3;
-    let s = beaker(80, 36, 140, 100, sunk ? 80 : 60);
-    const top = sunk ? (step === 2 ? 70 : 78) : 62;
-    s += block(124, top, 40, 36);
-    s += arrow(144, top + 36, 144, top + 36 + (step === 2 ? 22 : 16), RAY, 1.5);
-    s += arrow(144, top, 144, top - (step === 1 || step === 0 ? 22 : 14), SEC, 1.6);
-    s += text(176, top + 48, 'F↓', { anchor: 'start', size: 10, fill: RAY });
-    s += text(176, top - 8, 'F↑', { anchor: 'start', size: 10, fill: SEC });
+    const z = 44;
+    const level = sunk ? 44 : 32;
+    let s = tableBoard(220, 72);
+    s += beaker3d(100, z, 46, 62, level);
+    const blockY = sunk ? (step === 2 ? 30 : 26) : 36;
+    s += block3d(88, z - 8, 24, sunk ? 22 : 14, 18, { y0: blockY });
+    const top = blockY + (sunk ? 22 : 14);
+    const bot = blockY;
+    s += oblArrow3d(100, bot, z, 100, bot - (step === 2 ? 18 : 12), z, SEC, 1.6);
+    s += oblArrow3d(100, top, z, 100, top + (step === 1 || step === 0 ? 18 : 12), z, RAY, 1.5);
+    s += text(...obl(118, top + 10, z), 'F↓', { anchor: 'start', size: 10, fill: RAY });
+    s += text(...obl(118, bot - 6, z), 'F↑', { anchor: 'start', size: 10, fill: SEC });
     return s;
   });
 }
@@ -2115,44 +2533,51 @@ function drawBuoyWeigh(lang, step) {
     4: [['改变 g', 'Change g'], ['G 和 Fb 都含 g', 'Both G and Fb contain g']],
   }, () => {
     const slack = step === 3;
-    let s = beaker(110, 48, 110, 88, 70);
-    s += springV(156, 28, slack ? 46 : 58, 5, 4);
-    if (!slack) s += line(156, 58, 156, 78, INK, 1.3);
-    s += block(140, slack ? 70 : 86, 32, 26);
-    s += text(200, slack ? 60 : 48, slack ? L(lang, '松', 'slack') : 'T', { anchor: 'start', size: 12, fill: slack ? MUTED : RAY });
-    if (step === 4) s += text(40, 70, 'g', { anchor: 'start', size: 16 });
+    const z = 44;
+    let s = tableBoard(220, 72);
+    s += beaker3d(112, z, 42, 58, 40);
+    s += springScale3d(124, z, slack ? 8 : 22, { fat: false });
+    if (!slack) s += oblLine([124, 18, z], [124, 28, z], INK, 1.3);
+    s += block3d(110, z - 6, 28, slack ? 10 : 18, 16, { y0: slack ? 30 : 18 });
+    s += text(...obl(196, slack ? 36 : 28, z), slack ? L(lang, '松', 'slack') : 'T', { anchor: 'start', size: 12, fill: slack ? MUTED : RAY });
+    if (step === 4) s += text(...obl(36, 30, z), 'g', { anchor: 'start', size: 16 });
     return s;
   });
 }
 
 function drawCapacitance(lang, step) {
-  return shown(lang, step, {
+  const titles = {
     '-1': [['电容', 'Capacitance'], ['两块平行板', 'Two parallel plates']],
     0: [['定义', 'Definition'], ['C = Q / U', 'C = Q / U']],
     1: [['电荷加倍', 'Double Q'], ['C 加倍', 'C doubles']],
     2: [['电压加倍', 'Double U'], ['C 减半', 'C halves']],
     3: [['同比改变', 'Same factor'], ['C 不变', 'C unchanged']],
     4: [['再取一组', 'Another pair'], ['比值仍然稳定', 'The ratio stays put']],
-  }, () => {
-    const q = step === 1 ? 5 : step === 4 ? 2 : 3;
-    let s = line(90, 48, 90, 120, INK, 2);
-    s += line(150, 48, 150, 120, INK, 2);
-    for (let i = 0; i < q; i++) s += text(78, 64 + i * 14, '+', { size: 12, fill: RAY });
-    for (let i = 0; i < q; i++) s += text(162, 64 + i * 14, '−', { size: 12, fill: SEC });
-    s += hDim(90, 150, 132, step === 2 ? 'U↑' : 'U', SEC);
-    return s;
-  });
+  };
+  const [title, cap] = titles[step];
+  const z = 44;
+  const gap = step === 2 ? 52 : 34;
+  const q = step === 1 ? 5 : step === 4 ? 2 : 3;
+  let body = tableBoard(220, 72);
+  body += parallelPlates3d(72, z, gap, 58);
+  for (let i = 0; i < q; i++) {
+    body += text(...obl(76, 18 + i * 10, z), '+', { size: 11, fill: RAY });
+    body += text(...obl(72 + gap + 6, 18 + i * 10, z), '−', { size: 11, fill: SEC });
+  }
+  body += dimFront(72, 72 + gap, step === 2 ? 'U↑' : 'U', SEC, z + 10);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawCarnot(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['卡诺循环', 'Carnot cycle'], ['高温热源与低温热源', 'Hot and cold reservoirs']],
     0: [['读效率', 'Read efficiency'], ['记下 Th、Tc 和 η', 'Note Th, Tc, and η']],
     1: [['公式', 'Formula'], ['η = 1 − Tc/Th', 'η = 1 − Tc/Th']],
     2: [['提高 Tc', 'Raise Tc'], ['效率下降', 'Efficiency falls']],
     3: [['提高 Th', 'Raise Th'], ['效率上升', 'Efficiency rises']],
     4: [['温差消失', 'Temperatures meet'], ['η 接近 0', 'η approaches 0']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const hot = step === 3 ? 36 : step === 4 ? 70 : 48;
     const cold = step === 2 || step === 4 ? 78 : 108;
     let s = box(36, hot, 70, 28, { fill: RAY, op: 0.15 });
@@ -2168,14 +2593,15 @@ function drawCarnot(lang, step) {
 }
 
 function drawOrbit(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['中心天体', 'Central body'], ['轨道由速度决定', 'Speed chooses the orbit']],
     0: [['读轨道', 'Read the orbit'], ['偏心率、环绕与逃逸', 'Eccentricity, circular, escape']],
     1: [['环绕速度', 'Circular speed'], ['圆轨道，比能量为负', 'A circle, negative specific energy']],
     2: [['椭圆', 'Ellipse'], ['介于环绕和逃逸之间', 'Between circular and escape']],
     3: [['抛物线', 'Parabola'], ['比能量约为 0', 'Specific energy about 0']],
     4: [['双曲线', 'Hyperbola'], ['E > 0', 'E > 0']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = circ(120, 88, 8, { fill: RAY, stroke: 'none' });
     if (step === 1 || step === 0 || step === -1) s += circ(120, 88, 40, { fill: 'none', stroke: SEC, w: 1.5 });
     if (step === 2 || step === -1) s += `<ellipse cx="150" cy="88" rx="70" ry="36" fill="none" stroke="${INK}" stroke-width="1.5"/>`;
@@ -2193,14 +2619,15 @@ function drawOrbit(lang, step) {
 }
 
 function drawCircular(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['匀速圆周', 'Uniform circular'], ['速率不变，方向在变', 'Speed fixed, direction changes']],
     0: [['方向在变', 'Direction changes'], ['速率不变', 'The speed does not']],
     1: [['向心', 'Centripetal'], ['a = v²/r = ω²r', 'a = v²/r = ω²r']],
     2: [['半径变大', 'Larger radius'], ['ω 不变时 v 和 a 都增大', 'At fixed ω, v and a grow']],
     3: [['角速度变大', 'Larger ω'], ['a 按 ω² 增大', 'a grows with ω²']],
     4: [['质量变大', 'Larger mass'], ['F 增大，a 不变', 'F grows, a does not']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const rad = step === 2 ? 48 : 34;
     let s = circ(150, 88, rad, { fill: 'none', stroke: INK, w: 1.5 });
     s += circ(150 + rad, 88, step === 4 ? 8 : 5, { fill: PAPER });
@@ -2221,31 +2648,34 @@ function drawCollide(lang, step) {
     4: [['靶更重', 'Heavier target'], ['比较两种碰撞的末速度', 'Compare final speeds']],
   }, () => {
     const stick = step === 2;
-    let s = ground(30, 300, 120);
-    s += block(50, 88, 46, 28);
-    s += text(73, 106, 'm₁', { size: 11 });
-    s += arrow(96, 102, 120, 102, RAY, 1.5);
+    const z = 46;
+    let s = tableBoard(220, 72);
+    s += oblPoly3([[28, 2, z - 12], [200, 2, z - 12], [200, 0, z + 12], [28, 0, z + 12]], { fill: '#ddd8ce', w: 1.1 });
+    s += cart3d(42, z, 44, 18, 26);
+    s += text(...obl(64, 24, z), 'm₁', { size: 11 });
+    s += oblArrow3d(86, 14, z, 108, 14, z, RAY, 1.5);
     if (stick) {
-      s += block(150, 88, 70, 28);
-      s += text(185, 106, 'v', { size: 11, fill: SEC });
+      s += cart3d(128, z, 64, 18, 26);
+      s += text(...obl(160, 24, z), 'v', { size: 11, fill: SEC });
     } else {
-      s += block(170, 88, 40, 28);
-      s += text(190, 106, 'm₂', { size: 11 });
-      if (step === 3) s += arrow(150, 102, 120, 102, SEC, 1.4);
+      s += cart3d(148, z, 40, 18, 26);
+      s += text(...obl(168, 24, z), 'm₂', { size: 11 });
+      if (step === 3) s += oblArrow3d(148, 14, z, 120, 14, z, SEC, 1.4);
     }
     return s;
   });
 }
 
 function drawCoupled(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['耦合摆', 'Coupled pendulums'], ['等长双摆，弱弹簧相连', 'Equal pendulums, weak spring']],
     0: [['一个先动', 'One starts'], ['能量逐渐传给另一个', 'Energy gradually reaches the other']],
     1: [['方程', 'Equations'], ['耦合项是 κ(θ₁−θ₂)', 'The coupling is κ(θ1−θ2)']],
     2: [['能量交换', 'Energy swap'], ['此消彼长，合计守住', 'One falls as the other rises']],
     3: [['同相', 'In phase'], ['耦合项为零，一起摆', 'Coupling term is zero']],
     4: [['κ 或 L', 'κ or L'], ['κ 大则交换快，L 大则摆慢', 'Larger κ swaps faster; larger L swings slower']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const a1 = step === 3 ? 18 : step === 0 ? 22 : 16;
     const a2 = step === 3 ? 18 : step === 0 ? 0 : -14;
     let s = pendulum(100, 42, 62, a1, 7);
@@ -2261,14 +2691,15 @@ function drawCoupled(lang, step) {
 }
 
 function drawCurrent(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['电流', 'Current'], ['电荷在一段时间里通过截面', 'Charge through a section in a time']],
     0: [['定义', 'Definition'], ['I = Q / t', 'I = Q / t']],
     1: [['时间加倍', 'Double t'], ['电流减半', 'Current halves']],
     2: [['电荷加倍', 'Double Q'], ['电流加倍', 'Current doubles']],
     3: [['同比放大', 'Same factor'], ['I 不变', 'I unchanged']],
     4: [['很短的时间', 'A short time'], ['Q 同比变小则 I 仍相同', 'Q scales down and I stays']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const n = step === 2 ? 6 : step === 4 ? 2 : 4;
     let s = line(40, 88, 280, 88, INK, 1.6);
     for (let i = 0; i < n; i++) s += arrow(70 + i * 28, 88, 88 + i * 28, 88, RAY, 1.4);
@@ -2279,14 +2710,15 @@ function drawCurrent(lang, step) {
 }
 
 function drawCyclotron(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['匀强磁场中的圆', 'Circle in a uniform field'], ['只看半径和角速度', 'Radius and angular speed only']],
     0: [['读 r 与 ω', 'Read r and ω'], ['粒子走圆', 'The particle moves on a circle']],
     1: [['关系', 'Relations'], ['r = mv/(|q|B)，ω = |q|B/m', 'r = mv/(|q|B), ω = |q|B/m']],
     2: [['只增大 v', 'Larger v only'], ['半径增大，ω 不变', 'Radius grows, ω does not']],
     3: [['只增大 B', 'Larger B only'], ['半径变小，ω 变大', 'Radius shrinks, ω grows']],
     4: [['质量或电荷号', 'Mass or sign'], ['m 大则 r 大 ω 小；反号只反向', 'Larger m: bigger r, smaller ω']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const rad = step === 2 ? 48 : step === 3 ? 22 : 34;
     let s = crosses(70, 40, 140, 90, step === 3 ? 12 : 18);
     s += circ(150, 86, rad, { fill: 'none', stroke: RAY, w: 1.7 });
@@ -2298,35 +2730,38 @@ function drawCyclotron(lang, step) {
 }
 
 function drawDensity(lang, step) {
-  return shown(lang, step, {
+  const titles = {
     '-1': [['密度', 'Density'], ['同体积的不同物质', 'Same volume, different substance']],
     0: [['读质量', 'Read the mass'], ['选定物质，记下 V 和 ρ', 'Choose a substance, note V and ρ']],
     1: [['公式', 'Formula'], ['m = ρV', 'm = ρV']],
     2: [['酒精与铁', 'Alcohol and iron'], ['同体积，质量按密度比', 'Same volume, mass follows density']],
     3: [['体积加倍', 'Double the volume'], ['质量加倍，密度不变', 'Mass doubles, density does not']],
     4: [['改用 ρ', 'Edit ρ'], ['ρ = m/V 仍然成立', 'ρ = m/V still holds']],
-  }, () => {
-    const big = step === 3;
-    let s = block(40, big ? 60 : 78, big ? 70 : 48, big ? 50 : 36);
-    s += text(big ? 75 : 64, big ? 90 : 100, step === 2 ? L(lang, '酒精', 'alcohol') : 'V', { size: 11 });
-    if (step === 2) {
-      s += block(180, 70, 48, 36);
-      s += text(204, 92, L(lang, '铁', 'iron'), { size: 11, fill: RAY });
-    }
-    s += text(230, 60, step === 3 ? '2m' : 'm', { anchor: 'start', size: 16 });
-    return s;
-  });
+  };
+  const [title, cap] = titles[step];
+  const z = 42;
+  const big = step === 3;
+  const w = big ? 34 : 24;
+  const h = big ? 28 : 20;
+  let body = tableBoard(220, 72);
+  body += block3d(28, z, w, h, 20, { label: step === 2 ? L(lang, '酒精', 'alcohol') : 'V' });
+  if (step === 2) body += block3d(120, z, 24, h, 20, { label: L(lang, '铁', 'iron'), labelFill: RAY });
+  body += springScale3d(172, z, 4);
+  body += text(...obl(172, 52, z), step === 3 ? '2m' : 'm', { size: 14 });
+  if (step === 1) body += text(...obl(172, 68, z), 'ρV', { size: 12, fill: SEC });
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawDipole(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['角分布', 'Angular factor'], ['只画 sin²θ，不是天线', 'sin²θ only, not an antenna']],
     0: [['θ = 0', 'θ = 0'], ['角因子为 0', 'The factor is 0']],
     1: [['θ = 90°', 'θ = 90°'], ['因子为 1，最大方向', 'Factor 1, the maximum']],
     2: [['30° 与 60°', '30° and 60°'], ['60° 明显更大', '60° is clearly larger']],
     3: [['θ = 180°', 'θ = 180°'], ['回到轴上，因子又为 0', 'Back on the axis, factor 0 again']],
     4: [['只是角因子', 'Angular factor only'], ['不是功率或馈电', 'Not power and not a feed']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = line(160, 40, 160, 130, INK, 1.3);
     s += line(70, 86, 250, 86, MUTED, 1);
     const lobe = (scale) => {
@@ -2349,14 +2784,15 @@ function drawDipole(lang, step) {
 }
 
 function drawDispersion(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['色散', 'Dispersion'], ['ω 与 k 不是直线', 'ω versus k is not a straight line']],
     0: [['读三个量', 'Read three quantities'], ['ω、相速度、群速度', 'ω, phase velocity, group velocity']],
     1: [['两种速度', 'Two speeds'], ['vp = ω/k，vg = c²k/ω', 'vp = ω/k, vg = c²k/ω']],
     2: [['增大 k', 'Larger k'], ['vp 与 vg 逐渐靠近', 'vp and vg move together']],
     3: [['增大 ω₀', 'Larger ω0'], ['vp 变大，vg 变小', 'vp rises, vg falls']],
     4: [['ω₀ → 0', 'ω0 → 0'], ['两种速度都靠近 c', 'Both speeds approach c']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const x0 = 50;
     const y0 = 120;
     let s = axes(x0, 40, 200, 80);
@@ -2376,14 +2812,15 @@ function drawDispersion(lang, step) {
 }
 
 function drawDoppler(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['多普勒', 'Doppler'], ['声源 S 与观察者 O', 'Source S and observer O']],
     0: [['都静止', 'Both at rest'], ['f′ = f', 'f′ = f']],
     1: [['观察者靠近', 'Observer approaches'], ['分子用 v+vo，f′ 升高', 'Numerator v+vo, f′ rises']],
     2: [['声源靠近', 'Source approaches'], ['分母用 v−vs', 'Denominator uses v−vs']],
     3: [['互相远离', 'Moving apart'], ['频率下降', 'Frequency falls']],
     4: [['只改变 f', 'Change f only'], ['f′ 与 f 成正比', 'f′ scales with f']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = text(70, 120, 'S', { size: 13, bold: true });
     s += text(240, 120, 'O', { size: 13, bold: true, fill: SEC });
     const squeeze = step === 2 || step === 1;
@@ -2399,38 +2836,44 @@ function drawDoppler(lang, step) {
 }
 
 function drawDoubleSlit(lang, step) {
-  return shown(lang, step, {
+  const titles = {
     '-1': [['双缝', 'Double slit'], ['双缝、屏、条纹', 'Slits, screen, fringes']],
     0: [['中央亮纹', 'Central bright'], ['y = 0 处最亮', 'Brightest at y = 0']],
     1: [['条纹间距', 'Fringe spacing'], ['Δy = λD/d', 'Δy = λD/d']],
     2: [['缝距或波长', 'Slit gap or wavelength'], ['d 小或 λ、D 大则变疏', 'Smaller d, or larger λ or D, spreads them']],
     3: [['光强形状', 'Intensity shape'], ['正比于 cos²', 'Proportional to cos²']],
     4: [['单缝包络', 'Single-slit envelope'], ['再乘 sinc²', 'Times sinc²']],
-  }, () => {
-    let s = box(70, 40, 8, 88, { fill: INK, stroke: 'none' });
-    s += box(70, 52, 8, 6, { fill: PAPER, stroke: 'none' });
-    s += box(70, 70, 8, 6, { fill: PAPER, stroke: 'none' });
-    const gap = step === 2 ? 22 : 12;
-    for (let i = -3; i <= 3; i++) {
-      const y = 84 + i * gap;
-      if (y > 36 && y < 140) s += line(230, y, 250, y, i === 0 ? RAY : SEC, i === 0 ? 3 : 1.4);
-    }
-    s += ray(78, 55, 230, 84, RAY);
-    s += ray(78, 73, 230, 84, RAY);
-    if (step === 4) s += path('M 200 40 Q 240 84 200 128', { stroke: MUTED, w: 1.2, dash: '4 3' });
-    return s;
-  });
+  };
+  const [title, cap] = titles[step];
+  const z = 40;
+  const slitX = 52;
+  const scrX = 168;
+  let body = tableBoard(220, 72);
+  body += oblPoly3([[16, 2, z - 4], [200, 2, z - 4], [200, 2, z + 4], [16, 2, z + 4]], { fill: '#d8d2c6', w: 1.2 });
+  body += slitPlate3d(slitX, z, 54, 28, 5, true);
+  body += candle3d(24, z, { h: 22, lit: true, thin: true });
+  body += screenOnStand(scrX, z, 50);
+  for (let i = -2; i <= 2; i++) {
+    const yy = 30 + i * (step === 2 ? 9 : 6);
+    body += oblLine([scrX - 1, yy, z + 14], [scrX - 1, yy, z - 14], i === 0 ? RAY : SEC, i === 0 ? 2.5 : 1.3);
+  }
+  body += oblRay([34, 32, z], [slitX, 30, z], RAY);
+  body += oblRay([34, 32, z], [slitX, 36, z], RAY);
+  body += dimFront(slitX, scrX, 'D', SEC, z + 8);
+  if (step === 1) body += text(...obl(slitX + 6, 48, z + 12), 'd', { size: 11, fill: SEC });
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawEcho(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['回声测距', 'Echo range'], ['声音走到反射面再回来', 'Sound goes out and comes back']],
     0: [['读距离', 'Read the distance'], ['记下 t 和 v', 'Note t and v']],
     1: [['公式', 'Formula'], ['s = vt/2', 's = v t / 2']],
     2: [['时间加倍', 'Double t'], ['距离加倍', 'Distance doubles']],
     3: [['声速改变', 'Different speed'], ['同一时间，距离正比于 v', 'Same time, distance scales with v']],
     4: [['忘了除 2', 'Forgetting the half'], ['vt 恰好是读数的两倍', 'v t is exactly twice the reading']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const sDist = step === 2 ? 150 : 100;
     let body = box(40, 70, 28, 40, { fill: PAPER });
     body += text(54, 94, L(lang, '源', 'src'), { size: 11 });
@@ -2444,14 +2887,15 @@ function drawEcho(lang, step) {
 }
 
 function drawEfficiency(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['效率', 'Efficiency'], ['输入分成有用和浪费', 'Input splits into useful and waste']],
     0: [['读 η', 'Read η'], ['记下 Ein 和 Eu', 'Note Ein and Eu']],
     1: [['公式', 'Formula'], ['η = Eu/Ein，浪费 = Ein−Eu', 'η = Eu/Ein, waste = Ein−Eu']],
     2: [['有用变多', 'More useful'], ['效率升高', 'Efficiency rises']],
     3: [['输入变多', 'More input'], ['效率下降，浪费变大', 'Efficiency falls, waste grows']],
     4: [['没有有用输出', 'No useful output'], ['效率为 0', 'Efficiency is 0']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const eu = step === 4 ? 0 : step === 2 ? 36 : 20;
     const waste = step === 3 ? 36 : step === 4 ? 40 : 18;
     let s = arrow(30, 80, 110, 80, INK, 1.8);
@@ -2467,14 +2911,15 @@ function drawEfficiency(lang, step) {
 }
 
 function drawEmWave(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['电磁波', 'Electromagnetic wave'], ['E 与 B 互相垂直', 'E and B are perpendicular']],
     0: [['同相', 'In phase'], ['一起变号，没有相位差', 'They change sign together']],
     1: [['波速', 'Wave speed'], ['c = fλ', 'c = fλ']],
     2: [['频率升高', 'Higher frequency'], ['波长变短，仍同相', 'Shorter wavelength, still in phase']],
     3: [['E 的振幅', 'E amplitude'], ['B 按 |E|/c 一起变', 'B follows |E|/c']],
     4: [['传播方向', 'Direction of travel'], ['与 E、B 都垂直', 'Perpendicular to both E and B']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const cycles = step === 2 ? 3 : 1.4;
     const ampE = step === 3 ? 28 : 16;
     let s = arrow(30, 90, 300, 90, INK, 1.2);
@@ -2488,14 +2933,15 @@ function drawEmWave(lang, step) {
 }
 
 function drawEnergy(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['斜面能量', 'Incline energy'], ['斜面接到一段水平面', 'An incline running onto a flat']],
     0: [['没有摩擦', 'No friction'], ['机械能保持 m g H', 'Mechanical energy stays m g H']],
     1: [['沿斜面', 'On the incline'], ['a = g sin α', 'a = g sin α']],
     2: [['加上摩擦', 'Add friction'], ['机械能下降，水平段停下', 'Energy falls; it stops on the flat']],
     3: [['更陡', 'Steeper'], ['下滑更快', 'It speeds up more']],
     4: [['只增大质量', 'Mass only'], ['μ=0 时加速度不变', 'With μ = 0, acceleration is unchanged']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const ang = step === 3 ? 38 : 24;
     const rad = (ang * Math.PI) / 180;
     const x0 = 40;
@@ -2515,14 +2961,15 @@ function drawEnergy(lang, step) {
 }
 
 function drawShare(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['能量分配', 'Energy share'], ['一个总量分进两个库', 'One store split into two']],
     0: [['读两库', 'Read both stores'], ['E₁、E₂ 与合计', 'E1, E2, and the total']],
     1: [['比例', 'Fraction'], ['E₂ = f E₀', 'E2 = f E0']],
     2: [['f 从 0 到 1', 'f from 0 to 1'], ['能量从库 1 转到库 2', 'Energy moves from store 1 to store 2']],
     3: [['总量变大', 'Larger total'], ['两库同比增大', 'Both stores scale']],
     4: [['各一半', 'Half each'], ['f = 0.5，两库相等', 'f = 0.5, the stores match']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const f = step === 2 ? 0.85 : step === 4 ? 0.5 : step === 0 ? 0.35 : 0.4;
     const scale = step === 3 ? 70 : 52;
     let s = box(70, 120 - f * scale, 50, f * scale, { fill: RAY, op: 0.25 });
@@ -2534,14 +2981,15 @@ function drawShare(lang, step) {
 }
 
 function drawPotential(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['匀强电场', 'Uniform field'], ['平行极板，间距 d', 'Parallel plates, separation d']],
     0: [['电势差', 'Potential difference'], ['U = Ed', 'U = E d']],
     1: [['电荷的功', 'Work on a charge'], ['W = qU', 'W = q U']],
     2: [['间距变大', 'Larger d'], ['U 和 |W| 都增大', 'U and |W| both grow']],
     3: [['负电荷', 'Negative charge'], ['功的符号反过来', 'The sign of the work flips']],
     4: [['场强加倍', 'Double E'], ['U 和 W 都加倍', 'U and W both double']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const gap = step === 2 ? 90 : 60;
     let s = line(80, 40, 80, 130, INK, 2);
     s += line(80 + gap, 40, 80 + gap, 130, SEC, 2);
@@ -2552,7 +3000,8 @@ function drawPotential(lang, step) {
   });
 }
 
-function wellFig(finite, step) {
+function wellFig(M, finite, step) {
+  const { line, polyLine, text } = M;
   const x1 = 70;
   const x2 = step === 2 ? 230 : 190;
   const top = finite ? 48 : 36;
@@ -2582,35 +3031,36 @@ function wellFig(finite, step) {
 }
 
 function drawFinite(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['有限深势阱', 'Finite well'], ['波函数可以渗出阱外', 'The wave can leak outside']],
     0: [['束缚态', 'Bound states'], ['读个数、基态和宇称', 'Count, ground state, parity']],
     1: [['比无限阱低', 'Below the infinite well'], ['基态能量更低', 'The ground energy is lower']],
     2: [['改变宽度', 'Change the width'], ['数目和位置一起变', 'Count and positions both move']],
     3: [['阱变浅', 'Shallower well'], ['束缚态变少', 'Fewer bound states']],
     4: [['透射', 'Transmission'], ['高于阱口时 T 明显变大', 'T rises once E clears the well']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     if (step === 4) {
       let s = axes(48, 40, 200, 80);
       s += axisLabels(48, 40, 190, 80, 'E', 'T');
       s += polyLine([[48, 110], [120, 104], [150, 70], [230, 48]], RAY, 1.7);
       return s;
     }
-    let s = wellFig(true, step);
+    let s = wellFig(M, true, step);
     if (step === 3) s += text(200, 60, 'V₀↓', { size: 12, fill: RAY });
     return s;
   });
 }
 
 function drawInfinite(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['无限深势阱', 'Infinite well'], ['两端波函数为零', 'The wave is zero at both walls']],
     0: [['基态', 'Ground state'], ['n = 1，内部无节点', 'n = 1, no interior node']],
     1: [['更高能级', 'Higher levels'], ['节点数是 n−1，能量按 n²', 'Nodes are n−1; energy follows n²']],
     2: [['宽度加倍', 'Double L'], ['同一 n 的能量变为 1/4', 'Same n, energy becomes 1/4']],
     3: [['阱壁', 'The walls'], ['x = 0 和 x = L 处为零', 'Zero at x = 0 and x = L']],
     4: [['核对 n²', 'Check n²'], ['E₃/E₁ 接近 9', 'E3/E1 is about 9']],
-  }, () => wellFig(false, step));
+  }, (M) => wellFig(M, false, step));
 }
 
 function drawCompose(lang, step) {
@@ -2623,11 +3073,14 @@ function drawCompose(lang, step) {
     4: [['不要取绝对值再加', 'Do not add the sizes'], ['方向相反时那样会算大', 'That overcounts when they oppose']],
   }, () => {
     const f2 = step === 0 ? 40 : step === 1 ? -24 : step === 2 ? -40 : step === 3 ? -64 : 36;
-    let s = line(40, 90, 280, 90, MUTED, 1.2);
-    s += arrow(80, 90, 80 + 48, 90, RAY, 1.8);
-    s += text(100, 78, 'F₁', { size: 12, fill: RAY });
-    if (f2 !== 0) s += arrow(200, 90, 200 + f2, 90, SEC, 1.8);
-    s += text(200, 78, 'F₂', { size: 12, fill: SEC });
+    const z = 46;
+    let s = tableBoard(220, 72);
+    s += block3d(90, z - 8, 48, 16, 28, { y0: 0 });
+    s += oblLine([40, 10, z], [200, 10, z], MUTED, 1.2);
+    s += oblArrow3d(70, 20, z, 70 + 44, 20, z, RAY, 1.8);
+    s += text(...obl(86, 34, z), 'F₁', { size: 12, fill: RAY });
+    if (f2 !== 0) s += oblArrow3d(168, 20, z, 168 + f2, 20, z, SEC, 1.8);
+    s += text(...obl(168, 34, z), 'F₂', { size: 12, fill: SEC });
     return s;
   });
 }
@@ -2643,26 +3096,29 @@ function drawTorque(lang, step) {
   }, () => {
     const th = step === 2 ? 0 : step === 3 ? 90 : 50;
     const rad = (th * Math.PI) / 180;
-    const pivot = step === 4 ? 70 : 110;
-    let s = line(40, 100, 260, 100, INK, 2);
-    s += circ(120, 100, 4, { fill: INK, stroke: 'none' });
-    const fx = pivot + Math.cos(rad) * 36;
-    const fy = 100 - Math.sin(rad) * 36;
-    s += arrow(pivot, 100, fx, fy, RAY, 1.7);
-    s += text(pivot, 118, 's', { size: 12, fill: SEC });
+    const pivot = step === 4 ? 80 : 118;
+    const z = 46;
+    let s = tableBoard(220, 72);
+    s += fulcrum3d(118, z);
+    s += oblLine([44, 14, z], [196, 14, z], INK, 2.4);
+  const fx = pivot + Math.cos(rad) * 30;
+    const fy = 14 + Math.sin(rad) * 30;
+    s += oblArrow3d(pivot, 14, z, fx, fy, z, RAY, 1.7);
+    s += text(...obl(pivot, 38, z), 's', { size: 12, fill: SEC });
     return s;
   });
 }
 
 function drawFourier(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['方波级数', 'Square-wave series'], ['奇次正弦叠成方波', 'Odd sines build a square wave']],
     0: [['只有基频', 'Fundamental only'], ['N = 1', 'N = 1']],
     1: [['多项', 'More terms'], ['平台变平，边沿出现起伏', 'Flatter top, ripple at the edge']],
     2: [['部分和', 'Partial sum'], ['(4A/π) Σ sin(kωt)/k', '(4A/π) Σ sin(kωt)/k']],
     3: [['改变振幅', 'Change amplitude'], ['高度变化，形状不变', 'Height changes, shape does not']],
     4: [['改变基频', 'Change the fundamental'], ['谐波仍是 1、3、5 倍', 'Harmonics stay 1, 3, 5 times']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const N = step === 0 ? 1 : step === 4 ? 5 : 9;
     const amp = step === 3 ? 32 : 18;
     const cycles = step === 4 ? 2.4 : 1.2;
@@ -2678,14 +3134,15 @@ function drawFourier(lang, step) {
 }
 
 function drawFrames(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['参照系', 'Frames'], ['地面、小车、人', 'Ground, cart, person']],
     0: [['地面', 'Ground'], ['这是存储的速度', 'These are the stored speeds']],
     1: [['以车为参照', 'Cart frame'], ['人的速度变成相对小车', 'The person is seen from the cart']],
     2: [['以人为参照', 'Person frame'], ['小车速度变成相对人', 'The cart is seen from the person']],
     3: [['速度相同', 'Equal speeds'], ['互相看着是静止', 'Each sees the other at rest']],
     4: [['改变车速', 'Change the cart'], ['其余物体的相对速度一起变', 'Other relative speeds move with it']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = ground(24, 300, 124);
     s += block(70, 96, 70, 24);
     s += text(105, 112, L(lang, '车', 'cart'), { size: 11 });
@@ -2700,14 +3157,15 @@ function drawFrames(lang, step) {
 }
 
 function drawGravity(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['重力', 'Weight'], ['G = mg，g 看地点', 'G = mg, and g depends on place']],
     0: [['地球', 'Earth'], ['g = 9.80', 'g = 9.80']],
     1: [['月球', 'Moon'], ['约为地球的 1.62/9.80', 'About 1.62/9.80 of Earth']],
     2: [['火星', 'Mars'], ['g = 3.71，介于两者之间', 'g = 3.71, between the two']],
     3: [['质量加倍', 'Double the mass'], ['G 加倍', 'G doubles']],
     4: [['质量不是重力', 'Mass is not weight'], ['g 变了，G 就变', 'Change g and G changes']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const g = step === 1 ? 1.62 : step === 2 ? 3.71 : 9.8;
     const m = step === 3 ? 2 : 1;
     const len = Math.min(70, g * m * 3.2);
@@ -2722,14 +3180,15 @@ function drawGravity(lang, step) {
 }
 
 function drawHalf(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['半衰期', 'Half-life'], ['剩余份额随时间下降', 'The remaining fraction falls with time']],
     0: [['起点', 'The start'], ['t = 0 时 N = N₀', 'At t = 0, N = N0']],
     1: [['一个半衰期', 'One half-life'], ['N 约为 N₀/2', 'N is about N0/2']],
     2: [['两个半衰期', 'Two half-lives'], ['N 约为 N₀/4', 'N is about N0/4']],
     3: [['更长的半衰期', 'Longer half-life'], ['同一时刻剩余更多', 'More remains at the same time']],
     4: [['改变 N₀', 'Change N0'], ['形状不变，各点同比缩放', 'Shape fixed, every point scales']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const x0 = 48;
     const y0 = 120;
     let s = axes(x0, 36, 210, 84);
@@ -2752,14 +3211,15 @@ function drawHalf(lang, step) {
 }
 
 function drawEngine(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['热机循环', 'Engine cycle'], ['p–V 图上的闭合路径', 'A closed path on the p–V diagram']],
     0: [['四个冲程', 'Four strokes'], ['按顺序走一圈', 'One lap in order']],
     1: [['效率与功', 'Efficiency and work'], ['阴影面积是净功 W', 'The shaded area is the net work W']],
     2: [['不是吸热', 'Not the heat in'], ['面积等于 W，不等于 Qin', 'The area equals W, not Qin']],
     3: [['压缩比', 'Compression ratio'], ['r 增大则效率升高', 'Larger r, higher efficiency']],
     4: [['吸热变多', 'More heat in'], ['W 同比增大，η 不变', 'W scales, η does not']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const x0 = 70;
     const y0 = 120;
     let s = axes(x0, 40, 180, 80);
@@ -2773,14 +3233,15 @@ function drawEngine(lang, step) {
 }
 
 function drawHydrogen(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['径向概率', 'Radial probability'], ['P(r) 对全部 r 积分接近 1', 'P(r) over all r integrates near 1']],
     0: [['基态', 'Ground state'], ['n=1，l=0，一个峰', 'n=1, l=0, one peak']],
     1: [['有节点', 'A node'], ['n=2，l=0，主峰外移', 'n=2, l=0, the main peak moves out']],
     2: [['改变 l', 'Change l'], ['n=2，l=1，节点结构改变', 'n=2, l=1, the nodes change']],
     3: [['更高的 n', 'Higher n'], ['峰继续外移', 'The peak keeps moving out']],
     4: [['峰与节点', 'Peak and node'], ['P(r) 不是 R(r) 本身', 'P(r) is not R(r) itself']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const x0 = 46;
     const y0 = 120;
     let s = axes(x0, 40, 220, 80);
@@ -2800,14 +3261,15 @@ function drawHydrogen(lang, step) {
 }
 
 function drawIdeal(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['理想气体', 'Ideal gas'], ['汽缸、活塞、气体', 'Cylinder, piston, gas']],
     0: [['状态方程', 'Equation of state'], ['p = nRT/V', 'p = n R T / V']],
     1: [['体积加倍', 'Double V'], ['压强减半', 'Pressure halves']],
     2: [['温度加倍', 'Double T'], ['压强加倍', 'Pressure doubles']],
     3: [['物质的量加倍', 'Double n'], ['压强加倍', 'Pressure doubles']],
     4: [['等压膨胀', 'Isobaric expansion'], ['T 与 V 同倍，p 不变', 'T and V scale together, p stays']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const top = step === 1 || step === 4 ? 48 : 70;
     let s = piston(120, 36, 70, 90, top);
     s += box(122, top + 8, 66, 116 - top, { fill: SEC, op: step === 2 || step === 3 ? 0.22 : 0.1, stroke: 'none' });
@@ -2817,14 +3279,15 @@ function drawIdeal(lang, step) {
 }
 
 function drawImageCharge(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['像电荷', 'Image charge'], ['导体平面的另一侧', 'On the other side of a conducting plane']],
     0: [['镜像位置', 'Mirror position'], ['像在平面正下方同样距离', 'The image sits the same distance below']],
     1: [['吸引力', 'Attractive force'], ['大小 kq²/(2h)²，指向平面', 'Size kq²/(2h)², toward the plane']],
     2: [['高度减半', 'Half the height'], ['力变为 4 倍', 'The force becomes 4 times']],
     3: [['电荷变大', 'Larger charge'], ['力按 q² 增大', 'Force scales with q²']],
     4: [['不是真实电荷', 'Not a real charge'], ['导体内部并没有放电荷', 'Nothing is placed inside the conductor']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const h = step === 2 ? 24 : 42;
     let s = line(40, 88, 280, 88, INK, 2);
     s += hatchesH(40, 280, 88, true);
@@ -2845,25 +3308,28 @@ function drawInertia(lang, step) {
     3: [['挡板移近', 'Stop moves closer'], ['共同匀速段变短', 'The shared coast is shorter']],
     4: [['初速度', 'Initial speed'], ['碰板前更快，碰后加速度仍由 μ、g 决定', 'Faster before the stop; after, only μ and g']],
   }, () => {
-    const cartX = step === 3 ? 150 : 80;
-    let s = ground(24, 300, 124);
-    s += line(240, 80, 240, 124, INK, 2.4);
-    s += block(cartX, 100, 70, 20);
-    s += block(cartX + (step === 0 ? 50 : 16), 80, 28, 18);
-    if (step === 4) s += arrow(cartX + 70, 110, cartX + 110, 110, RAY, 1.5);
+    const cartX = step === 3 ? 130 : 70;
+    const z = 46;
+    let s = tableBoard(220, 72);
+    s += oblPoly3([[28, 2, z - 12], [200, 2, z - 12], [200, 0, z + 12], [28, 0, z + 12]], { fill: '#ddd8ce', w: 1.1 });
+    s += oblLine([178, 4, z], [178, 28, z], INK, 2.4);
+    s += cart3d(cartX, z, 66, 16, 26);
+    s += block3d(cartX + (step === 0 ? 42 : 14), z - 4, 22, 14, 14, { y0: 18 });
+    if (step === 4) s += oblArrow3d(cartX + 50, 18, z, cartX + 86, 18, z, RAY, 1.5);
     return s;
   });
 }
 
 function drawInternal(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['内能', 'Internal energy'], ['热量和功都能改变 ΔU', 'Heat and work can both change ΔU']],
     0: [['都为正', 'Both positive'], ['ΔU 等于两者之和', 'ΔU is their sum']],
     1: [['一进一出', 'One in, one out'], ['Q = −W 时 ΔU = 0', 'If Q = −W, then ΔU = 0']],
     2: [['只放热', 'Heat leaves'], ['W = 0，内能下降', 'W = 0, internal energy falls']],
     3: [['只做功', 'Work in only'], ['Q = 0，内能上升', 'Q = 0, internal energy rises']],
     4: [['交换数值', 'Swap the values'], ['ΔU 不变', 'ΔU is unchanged']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = box(120, 60, 80, 56, { fill: PAPER });
     s += text(160, 92, 'ΔU', { size: 14 });
     if (step !== 3) s += arrow(40, 78, 120, 78, RAY, 1.6);
@@ -2875,14 +3341,15 @@ function drawInternal(lang, step) {
 }
 
 function drawIsing(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['伊辛格子', 'Ising grid'], ['自旋向上或向下', 'Spins point up or down']],
     0: [['磁化与温度', 'Magnetisation and temperature'], ['标出 Tc', 'Mark Tc']],
     1: [['Tc 以下', 'Below Tc'], ['成片同向，|M| 明显', 'Patches align, |M| is clear']],
     2: [['Tc 以上', 'Above Tc'], ['更乱，|M| 接近 0', 'More mixed, |M| near 0']],
     3: [['涨落', 'Fluctuations'], ['台阶仍在 Tc 附近', 'The step stays near Tc']],
     4: [['更大的格子', 'Larger grid'], ['降采样只影响绘制', 'Downsampling only affects the drawing']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     if (step === 0 || step === 3) {
       let s = axes(48, 40, 200, 80);
       s += axisLabels(48, 40, 190, 80, 'T', '|M|');
@@ -2907,14 +3374,15 @@ function drawIsing(lang, step) {
 }
 
 function drawKinetic(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['气体动理论', 'Kinetic theory'], ['容器里的分子', 'Molecules in a box']],
     0: [['读压强', 'Read the pressure'], ['记下 ρ 和 vrms', 'Note ρ and vrms']],
     1: [['公式', 'Formula'], ['p = ρ vrms² / 3', 'p = ρ vrms² / 3']],
     2: [['速率加倍', 'Double the speed'], ['压强变为 4 倍', 'Pressure becomes 4 times']],
     3: [['密度加倍', 'Double the density'], ['压强加倍', 'Pressure doubles']],
     4: [['一减一半一加倍', 'Half ρ, double speed'], ['压强变为 2 倍', 'Pressure becomes 2 times']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = box(70, 48, 160, 80, { fill: PAPER });
     const n = step === 3 ? 12 : 7;
     const sp = step === 2 || step === 4 ? 16 : 8;
@@ -2929,14 +3397,15 @@ function drawKinetic(lang, step) {
 }
 
 function drawLaser(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['腔长', 'Cavity length'], ['两面镜子之间的距离 L', 'Distance L between two mirrors']],
     0: [['模式间隔', 'Mode spacing'], ['Δν = c / (2L)', 'Δν = c / (2L)']],
     1: [['腔长加倍', 'Double L'], ['间隔减半', 'The spacing halves']],
     2: [['腔长缩短', 'Shorter cavity'], ['模式分得更开', 'Modes sit farther apart']],
     3: [['用 c 心算', 'Check with c'], ['c = 3.00×10⁸ m/s', 'c = 3.00×10⁸ m/s']],
     4: [['不是功率', 'Not a power'], ['Δν 不是输出功率', 'Δν is not an output power']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const L = step === 1 ? 180 : step === 2 ? 80 : 130;
     const x = 160 - L / 2;
     let s = line(x, 50, x, 120, INK, 3);
@@ -2949,14 +3418,15 @@ function drawLaser(lang, step) {
 }
 
 function drawContract(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['长度收缩', 'Length contraction'], ['杆在相对运动的参照系里', 'A rod in a relatively moving frame']],
     0: [['很慢', 'Very slow'], ['ℓ 几乎等于 ℓ₀', 'ℓ is almost ℓ0']],
     1: [['速度增大', 'Larger speed'], ['γ 增大，ℓ 变短', 'γ grows, ℓ shortens']],
     2: [['静长加倍', 'Double the rest length'], ['收缩后的长度也加倍', 'The contracted length doubles too']],
     3: [['核对 γ', 'Check γ'], ['ℓ₀ / ℓ = γ', 'ℓ0 / ℓ = γ']],
     4: [['不是自身变短', 'Not shorter for itself'], ['变短的是相对运动中的长度', 'The shorter length is in the moving frame']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const w0 = step === 2 ? 160 : 120;
     const w = step === 0 || step === -1 ? w0 : step === 1 ? 70 : w0 * 0.72;
     let s = box(40, 48, w0, 16, { fill: PAPER, dash: '4 3', stroke: MUTED });
@@ -2968,14 +3438,15 @@ function drawContract(lang, step) {
 }
 
 function drawLorentz(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['洛伦兹力', 'Lorentz force'], ['速度与磁场垂直', 'Velocity perpendicular to the field']],
     0: [['大小和方向', 'Size and sense'], ['F = |q| v B', 'F = |q| v B']],
     1: [['v 或 B 增大', 'Larger v or B'], ['力同比增大', 'The force scales']],
     2: [['电荷为负', 'Negative charge'], ['力反向', 'The force flips']],
     3: [['v 或 B 为零', 'v or B is zero'], ['力为 0', 'The force is 0']],
     4: [['只此垂直情形', 'This perpendicular case'], ['公式假定 v 与 B 垂直', 'The formula assumes v perpendicular to B']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = crosses(150, 40, 120, 80, step === 1 ? 12 : 18);
     s += arrow(40, 86, step === 3 ? 70 : 130, 86, SEC, 1.7);
     s += text(70, 76, 'v', { size: 12, fill: SEC });
@@ -2990,14 +3461,15 @@ function drawLorentz(lang, step) {
 }
 
 function drawMalus(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['马吕斯', 'Malus'], ['起偏器与检偏器', 'Polariser and analyser']],
     0: [['夹角为 0', 'Angle 0'], ['I = I₀', 'I = I0']],
     1: [['夹角 90°', 'Angle 90°'], ['I = 0', 'I = 0']],
     2: [['夹角 60°', 'Angle 60°'], ['I = I₀/4', 'I = I0/4']],
     3: [['入射变强', 'Brighter input'], ['各角度同比增大', 'Every angle scales']],
     4: [['按平方下降', 'Falls as a square'], ['是 cos²θ，不是 cosθ', 'It is cos²θ, not cos θ']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const ang = step === 1 ? 90 : step === 2 ? 60 : 0;
     const rad = (ang * Math.PI) / 180;
     let s = line(70, 40, 70, 120, INK, 2);
@@ -3011,14 +3483,15 @@ function drawMalus(lang, step) {
 }
 
 function drawMassEnergy(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['质能', 'Mass–energy'], ['静止能量与质量成正比', 'Rest energy is proportional to mass']],
     0: [['读出 E', 'Read E'], ['记下质量 m', 'Note the mass m']],
     1: [['关系', 'Relation'], ['E = m c²', 'E = m c²']],
     2: [['质量加倍', 'Double the mass'], ['能量加倍', 'Energy doubles']],
     3: [['两端都看', 'Both ends of the range'], ['仍正比于 m', 'Still proportional to m']],
     4: [['不要另造量', 'No extra quantity'], ['画面没有功率或密度', 'The screen has no power or density']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const m = step === 2 ? 2 : 1;
     let s = block(40, 70, 36 * m, 28, { fill: PAPER });
     s += text(40 + 18 * m, 88, 'm', { size: 13 });
@@ -3030,14 +3503,15 @@ function drawMassEnergy(lang, step) {
 }
 
 function drawMaxwellSpeed(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['速率分布', 'Speed distribution'], ['一条有峰值的曲线', 'A curve with one peak']],
     0: [['三个速率', 'Three speeds'], ['vmp < 平均 < vrms', 'vmp < mean < vrms']],
     1: [['温度升高', 'Higher temperature'], ['变宽，峰值移向高速', 'Wider, peak moves faster']],
     2: [['质量增大', 'Larger mass'], ['变窄，峰值移向低速', 'Narrower, peak moves slower']],
     3: [['拖动标记', 'Drag the marker'], ['最可几速率决定于 T/m', 'The most probable speed sets T/m']],
     4: [['直方条数', 'Number of bins'], ['条更细或更粗，曲线不变', 'Bins change; the curve does not']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const x0 = 40;
     const y0 = 120;
     let s = axes(x0, 40, 220, 80);
@@ -3059,14 +3533,15 @@ function drawMaxwellSpeed(lang, step) {
 }
 
 function drawMaxwellWave(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['麦克斯韦波', 'Maxwell wave'], ['E 与 B 同相垂直', 'E and B in phase and perpendicular']],
     0: [['波速', 'Speed'], ['c = fλ，c 来自 μ₀、ε₀', 'c = fλ, with c from μ0 and ε0']],
     1: [['频率升高', 'Higher frequency'], ['λ 变短，仍同相', 'λ shortens; still in phase']],
     2: [['振幅', 'Amplitude'], ['|B| = |E|/c', '|B| = |E|/c']],
     3: [['位移电流', 'Displacement current'], ['过零附近 ∂E/∂t 大', '∂E/∂t is large near a zero']],
     4: [['不是传导电流', 'Not a conduction current'], ['也不据此设计天线', 'And not a plan for an antenna']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const cyc = step === 1 ? 3 : 1.5;
     let s = polyLine(sinePts(30, 80, 240, 20, cyc), RAY, 1.6);
     s += polyLine(sinePts(30, 112, 240, 12, cyc), SEC, 1.4);
@@ -3076,14 +3551,15 @@ function drawMaxwellWave(lang, step) {
 }
 
 function drawMembrane(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['矩形膜', 'Rectangular membrane'], ['四边固定', 'Fixed on all four edges']],
     0: [['基模', 'Fundamental'], ['m=n=1，没有内部节线', 'm=n=1, no interior node line']],
     1: [['沿 a 的节线', 'Node along a'], ['m=2，n=1', 'm=2, n=1']],
     2: [['频率公式', 'Frequency formula'], ['ω = πc √((m/a)²+(n/b)²)', 'ω = πc √((m/a)²+(n/b)²)']],
     3: [['边长变大', 'Longer side'], ['同一模的频率下降', 'The same mode drops in frequency']],
     4: [['交换 m、n', 'Swap m and n'], ['a≠b 时频率不同', 'If a ≠ b the frequency differs']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const w = step === 3 ? 150 : 110;
     let s = box(50, 48, w, 70, { fill: PAPER });
     if (step === 1 || step === 4) s += dash(50 + w / 2, 48, 50 + w / 2, 118, RAY, 1.3);
@@ -3093,14 +3569,15 @@ function drawMembrane(lang, step) {
 }
 
 function drawModes(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['双质点', 'Two masses'], ['三根弹簧串在一直线上', 'Three springs on one line']],
     0: [['对称模', 'Symmetric mode'], ['同向运动，频率 √(k/m)', 'Same sense, frequency √(k/m)']],
     1: [['反对称模', 'Antisymmetric mode'], ['反向运动，频率 √(3k/m)', 'Opposite sense, frequency √(3k/m)']],
     2: [['叠加', 'Superposition'], ['两个频率都在', 'Both frequencies are present']],
     3: [['劲度变大', 'Larger k'], ['两个频率都升高', 'Both frequencies rise']],
     4: [['质量变大', 'Larger mass'], ['两个频率都降低，比仍是 √3', 'Both fall; the ratio stays √3']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = springV(70, 70, 90, 0, 1);
     s += line(40, 80, 70, 80, INK, 1.4);
     s += path('M 70 80 Q 90 68 110 80', { w: 1.4 });
@@ -3125,14 +3602,20 @@ function drawOscillator(lang, step) {
     3: [['周期', 'Period'], ['m 大或 k 小则周期变长', 'Larger m or smaller k, longer period']],
     4: [['振幅', 'Amplitude'], ['能量按 A² 增大', 'Energy grows with A²']],
   }, () => {
-    const x = step === 1 || step === 4 ? 150 : step === 2 ? 70 : 110;
-    let s = line(30, 90, 40, 90, INK, 2);
-    s += path(`M 40 90 Q 60 78 ${r(x)} 90`, { w: 1.5 });
-    s += block(x, 76, 32, 28);
-    s += dash(120, 70, 120, 120, MUTED, 1);
+    const x = step === 1 || step === 4 ? 138 : step === 2 ? 64 : 100;
+    const z = 44;
+    let s = tableBoard(220, 72);
+    s += standPost(44, z, 56);
+    s += oblLine([44, 56, z], [x, 42, z], INK, 1.4);
+    const coilPts = [];
+    for (let i = 0; i <= 6; i++) {
+      coilPts.push([52 + i * ((x - 52) / 6), 52 - (i % 2 ? 6 : -6), z]);
+    }
+    s += oblPathPts(coilPts, { w: 1.5 });
+    s += block3d(x - 14, z - 6, 28, 18, 16, { y0: 0, label: 'm' });
+    s += oblLine([112, 0, z], [112, 36, z], MUTED, 1, '4 3');
     if (step === 0 || step === 4) {
-      s += box(220, 100, 40, 16, { fill: RAY, op: 0.3, stroke: 'none' });
-      s += text(240, 96, 'H', { size: 11, fill: RAY });
+      s += text(...obl(188, 28, z), 'H', { size: 11, fill: RAY });
     }
     return s;
   });
@@ -3148,22 +3631,36 @@ function drawPendulum(lang, step) {
     4: [['摆长或 g', 'Length or g'], ['L 大或 g 小则变慢', 'Larger L or smaller g, slower']],
   }, () => {
     const a = step === 1 ? 48 : 16;
-    const len = step === 4 ? 78 : 60;
-    let s = pendulum(110, 40, len, a, 7);
-    s += pendulum(210, 40, len, step === 3 ? a + 20 : a, 7);
+    const len = step === 4 ? 52 : 40;
+    const z = 44;
+    const pend3d = (cx, ang) => {
+      const rad = (ang * Math.PI) / 180;
+      const bx = cx + Math.sin(rad) * len;
+      const by = 52 + Math.cos(rad) * len;
+      let ps = standPost(cx, z, 52);
+      const [sx, sy] = obl(cx, 52, z);
+      const [ex, ey] = obl(bx, by, z);
+      ps += line(sx, sy, ex, ey, INK, 1.4);
+      ps += circ(ex, ey, 7, { fill: PAPER, w: 1.3 });
+      return ps;
+    };
+    let s = tableBoard(220, 72);
+    s += pend3d(80, a);
+    s += pend3d(168, step === 3 ? a + 20 : a);
     return s;
   });
 }
 
 function drawPhoto(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['光电效应', 'Photoelectric effect'], ['光打在金属表面上', 'Light on a metal surface']],
     0: [['低于阈频', 'Below threshold'], ['不出射', 'No electrons leave']],
     1: [['刚超过', 'Just above'], ['开始出射，Kmax 接近 0', 'Emission starts, Kmax near 0']],
     2: [['频率继续增大', 'Frequency keeps rising'], ['Kmax 线性增加，斜率对应 h', 'Kmax rises linearly, slope is h']],
     3: [['逸出功变大', 'Larger work function'], ['阈频升高', 'The threshold frequency rises']],
     4: [['截止关系', 'Cutoff'], ['h f₀ = W', 'h f0 = W']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = box(36, 70, 16, 50, { fill: PAPER });
     s += text(44, 100, 'M', { size: 11 });
     if (step !== 0) s += ray(20, 60, 44, 78, RAY);
@@ -3177,14 +3674,15 @@ function drawPhoto(lang, step) {
 }
 
 function drawPointField(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['点电荷的场', 'Field of a point charge'], ['放射状的电场线', 'Radial field lines']],
     0: [['随距离', 'With distance'], ['E = k|q|/r²', 'E = k|q|/r²']],
     1: [['距离加倍', 'Double r'], ['场强约为 1/4', 'The field is about 1/4']],
     2: [['电荷更大', 'Larger |q|'], ['E 同比增大', 'E scales']],
     3: [['改为负电荷', 'Change to negative'], ['箭头反向，大小不变', 'Arrows flip, size unchanged']],
     4: [['不是一次方', 'Not a first power'], ['加倍 r 最容易看出平方', 'Doubling r shows the square']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const inward = step === 3;
     const n = step === 2 ? 8 : 6;
     let s = chargeBall(160, 86, inward ? '−' : '+', step === 2 ? 18 : 14);
@@ -3203,14 +3701,15 @@ function drawPointField(lang, step) {
 }
 
 function drawResistivity(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['电阻定律', 'Resistivity'], ['一段均匀导线', 'A uniform wire']],
     0: [['读电阻', 'Read R'], ['R = ρL/A', 'R = ρ L / A']],
     1: [['长度加倍', 'Double L'], ['R 加倍', 'R doubles']],
     2: [['截面积加倍', 'Double A'], ['R 减半', 'R halves']],
     3: [['材料', 'Material'], ['ρ 加倍则 R 加倍', 'Double ρ and R doubles']],
     4: [['L 与 A 同倍', 'L and A together'], ['R 不变', 'R unchanged']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const len = step === 1 || step === 4 ? 180 : 120;
     const thick = step === 2 || step === 4 ? 16 : 8;
     let s = box(40, 84 - thick / 2, len, thick, { fill: step === 3 ? 'rgba(196,73,29,0.15)' : PAPER });
@@ -3221,14 +3720,15 @@ function drawResistivity(lang, step) {
 }
 
 function drawDisk(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['圆盘', 'Disk'], ['切向力使它转动', 'A tangential force turns it']],
     0: [['力垂直于半径', 'Force perpendicular to the radius'], ['读 τ、I、α', 'Read τ, I, α']],
     1: [['关系', 'Relations'], ['τ = RF，I = ½MR²', 'τ = RF, I = ½ M R²']],
     2: [['力指向圆心', 'Force toward the centre'], ['力矩和角加速度为 0', 'Torque and angular acceleration are 0']],
     3: [['力更大', 'Larger force'], ['α 同比增大', 'α scales']],
     4: [['质量或半径', 'Mass or radius'], ['M 大则 α 变小', 'Larger M, smaller α']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const rad = step === 4 ? 40 : 32;
     let s = circ(140, 86, rad, { fill: PAPER });
     s += circ(140, 86, 3, { fill: INK, stroke: 'none' });
@@ -3248,12 +3748,18 @@ function drawRuler(lang, step) {
     3: [['更小分度', 'Finer division'], ['估计位的数位前移', 'The estimate digit moves left']],
     4: [['不要停在整格', 'Do not stop on a whole mark'], ['除非边缘正好压在线上', 'Unless the edge sits on a line']],
   }, () => {
-    let s = box(30, 70, 260, 28, { fill: PAPER });
+    const z = 44;
+    const len = step === 3 ? 150 : 170;
+    let s = tableBoard(220, 72);
+    s += ruler3d(32, z, len);
     const div = step === 3 ? 10 : 20;
-    for (let x = 40; x <= 280; x += div) s += line(x, 70, x, x % (div * 2) === 0 ? 86 : 80, INK, 1.1);
-    const end = step === 1 ? 40 + div * 4 + div / 2 : step === 2 ? 40 + div * 4 + 2 : 40 + div * 5;
-    s += line(40, 60, 40, 108, SEC, 1.3);
-    s += line(end, 60, end, 108, RAY, 1.5);
+    const end = step === 1 ? 32 + div * 4 + div / 2 : step === 2 ? 32 + div * 4 + 2 : 32 + div * 5;
+    const [e1x, e1y] = obl(32, 18, z);
+    const [e2x, e2y] = obl(32, 6, z);
+    s += line(e1x, e1y, e2x, e2y, SEC, 1.3);
+    const [r1x, r1y] = obl(end, 18, z);
+    const [r2x, r2y] = obl(end, 4, z);
+    s += line(r1x, r1y, r2x, r2y, RAY, 1.5);
     return s;
   });
 }
@@ -3267,32 +3773,36 @@ function drawScales(lang, step) {
     3: [['地球与天文单位', 'Earth and 1 AU'], ['约 10⁷ m 和 10¹¹ m', 'About 10⁷ m and 10¹¹ m']],
     4: [['两级正中', 'Halfway between rungs'], ['看最近的一级如何切换', 'See which rung is nearest']],
   }, () => {
-    let s = line(160, 36, 160, 132, INK, 1.4);
+    const z = 44;
+    let s = tableBoard(220, 72);
+    s += oblLine([110, 4, z], [110, 48, z], INK, 2);
     const labels = [
-      [36, '10¹¹'],
-      [56, '10⁷'],
-      [84, '1 m'],
-      [108, '10⁻¹⁰'],
-      [128, '10⁻¹⁵'],
+      [44, '10¹¹'],
+      [38, '10⁷'],
+      [30, '1 m'],
+      [22, '10⁻¹⁰'],
+      [16, '10⁻¹⁵'],
     ];
-    labels.forEach(([y, lab], i) => {
+    labels.forEach(([yy, lab], i) => {
       const on = (step === 0 && i === 2) || (step === 1 && i === 3) || (step === 2 && i === 4) || (step === 3 && (i === 0 || i === 1));
-      s += line(148, y, 172, y, on ? RAY : MUTED, on ? 2 : 1.2);
-      s += text(180, y + 4, lab, { anchor: 'start', size: 11, fill: on ? RAY : INK });
+      s += oblLine([106, yy, z], [114, yy, z], on ? RAY : MUTED, on ? 2 : 1.2);
+      s += text(...obl(122, yy, z), lab, { anchor: 'start', size: 11, fill: on ? RAY : INK });
     });
+    s += block3d(40, z - 8, 20, 26, 16, { y0: 0, label: L(lang, '人', 'person') });
     return s;
   });
 }
 
 function drawSimul(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['同时性', 'Simultaneity'], ['杆两端的闪光', 'Flashes at the two ends of a rod']],
     0: [['β 很小', 'Small β'], ['两个闪光几乎同时', 'The flashes are almost simultaneous']],
     1: [['β 变大', 'Larger β'], ['Δt = γ β L₀ / c', 'Δt = γ β L0 / c']],
     2: [['L₀ 加倍', 'Double L0'], ['同一 β 下 Δt 加倍', 'At the same β, Δt doubles']],
     3: [['同时线', 'Line of simultaneity'], ['斜率对照 β/c', 'The slope follows β/c']],
     4: [['杆的静止描述', 'The rod at rest'], ['那里两端仍然同时', 'There the ends are still simultaneous']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = axes(50, 40, 200, 80);
     s += axisLabels(50, 40, 190, 80, 'x', 't');
     const tilt = step === 0 || step === 4 || step === -1 ? 0 : step === 1 ? 28 : 18;
@@ -3304,14 +3814,15 @@ function drawSimul(lang, step) {
 }
 
 function drawSingleSlit(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['单缝', 'Single slit'], ['中央亮纹和两侧暗纹', 'Central bright fringe and dark fringes']],
     0: [['第一暗纹', 'First dark fringe'], ['y ≈ λL/a', 'y ≈ λ L / a']],
     1: [['更高级次', 'Higher orders'], ['位置近似按级次成倍外移', 'Positions move out with the order']],
     2: [['缝更窄', 'Narrower slit'], ['暗纹远离中心', 'Dark fringes move out']],
     3: [['λ 或 L', 'λ or L'], ['暗纹同样外移', 'Dark fringes move out as well']],
     4: [['小角近似', 'Small-angle estimate'], ['级次太高时只作估计', 'High orders are only an estimate']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const y1 = step === 2 || step === 3 ? 36 : 52;
     let s = box(60, 70, 8, 40, { fill: INK, stroke: 'none' });
     s += box(60, 84, 8, 8, { fill: PAPER, stroke: 'none' });
@@ -3327,14 +3838,15 @@ function drawSingleSlit(lang, step) {
 }
 
 function drawAbsorb(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['声的吸收', 'Sound absorption'], ['屏障挡住一部分', 'A barrier takes part of it']],
     0: [['没有损失', 'No loss'], ['R = 0 且 d = 0 时 I = I₀', 'R = 0 and d = 0, so I = I0']],
     1: [['反射', 'Reflection'], ['透过按 (1−R) 下降', 'Transmission falls as (1−R)']],
     2: [['吸收', 'Absorption'], ['剩下的按 e^(−αd) 衰减', 'The rest falls as e^(−αd)']],
     3: [['厚度加倍', 'Double the thickness'], ['再乘一个 e^(−αd)', 'Multiply by another e^(−αd)']],
     4: [['入射变强', 'Stronger input'], ['I 同比增大', 'I scales']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const thick = step === 3 ? 36 : 16;
     let s = ray(20, 80, 90, 80, RAY);
     s += box(100, 56, thick, 48, { fill: MUTED, op: 0.15 });
@@ -3353,25 +3865,27 @@ function drawSpecific(lang, step) {
     3: [['功率增大', 'Larger power'], ['两份都升温更多', 'Both rise more']],
     4: [['回算 c', 'Recover c'], ['用 ΔT = Q/(cm)', 'From ΔT = Q/(c m)']],
   }, () => {
-    const h1 = step === 2 ? 16 : step === 3 ? 36 : 22;
-    const h2 = step === 3 ? 48 : 34;
-    let s = beaker(50, 50, 60, 80, 30);
-    s += beaker(170, 50, 60, 80, 30);
-    s += vDim(120, 120 - h1, 120, 'ΔT₁', RAY);
-    s += vDim(250, 120 - h2, 120, 'ΔT₂', SEC);
+    const z = 44;
+    let s = tableBoard(220, 72);
+    s += candle3d(52, z, { h: 22, lit: true, thin: true });
+    s += beaker3d(58, z, 28, 52, step === 2 ? 32 : 38);
+    s += beaker3d(152, z, 28, 52, step === 3 ? 48 : 40);
+    s += text(...obl(90, 36, z), step === 2 ? '2m' : 'ΔT₁', { size: 11, fill: RAY });
+    s += text(...obl(184, 44, z), 'ΔT₂', { size: 11, fill: SEC });
     return s;
   });
 }
 
 function drawStern(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['自旋测量', 'Spin measurement'], ['准备沿 +z，沿角 θ 测量', 'Prepared on +z, measured at angle θ']],
     0: [['θ = 0', 'θ = 0'], ['P(+) = 1，全是加', 'P(+) = 1, all plus']],
     1: [['θ = 180°', 'θ = 180°'], ['P(+) = 0，全是减', 'P(+) = 0, all minus']],
     2: [['θ = 90°', 'θ = 90°'], ['两个概率都是 1/2', 'Both probabilities are 1/2']],
     3: [['θ = 60°', 'θ = 60°'], ['P(+) 约为 0.75', 'P(+) is about 0.75']],
     4: [['概率之和', 'The probabilities add'], ['和为 1，公式是 cos²(θ/2)', 'They sum to 1; the factor is cos²(θ/2)']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const p = step === 0 ? 1 : step === 1 ? 0 : step === 2 ? 0.5 : step === 3 ? 0.75 : 0.6;
     const deg = step === 0 ? 0 : step === 1 ? 180 : step === 2 ? 90 : step === 3 ? 60 : 40;
     const rad = (deg * Math.PI) / 180;
@@ -3394,36 +3908,53 @@ function drawWatch(lang, step) {
     3: [['两格之间', 'Between marks'], ['估计到 0.1 s 量级', 'Estimate to about 0.1 s']],
     4: [['用角度回算', 'From the angle'], ['t = (角度/2π)×60', 't = (angle/2π)×60']],
   }, () => {
-    let s = circ(150, 86, 48, { fill: PAPER });
+    const z = 44;
+    let s = tableBoard(220, 72);
+    const [cx, cy] = obl(118, 26, z);
+    s += oblPoly3([[108, 0, z - 10], [128, 0, z - 10], [128, 6, z - 10], [108, 6, z - 10]], { fill: '#ddd8ce', w: 1.2 });
+    s += circ(cx, cy, 34, { fill: PAPER, w: 1.4 });
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
-      s += line(150 + Math.cos(a) * 40, 86 + Math.sin(a) * 40, 150 + Math.cos(a) * 46, 86 + Math.sin(a) * 46, INK, 1.2);
+      s += line(cx + Math.cos(a) * 28, cy + Math.sin(a) * 28, cx + Math.cos(a) * 33, cy + Math.sin(a) * 33, INK, 1.2);
     }
     const frac = step === 1 ? 0.25 : step === 2 ? 0.5 : step === 3 ? 0.62 : step === 4 ? 0.75 : 0;
     const a = frac * Math.PI * 2 - Math.PI / 2;
-    s += line(150, 86, 150 + Math.cos(a) * 32, 86 + Math.sin(a) * 32, RAY, 1.8);
+    s += line(cx, cy, cx + Math.cos(a) * 24, cy + Math.sin(a) * 24, RAY, 1.8);
     return s;
   });
 }
 
 function drawTelescope(lang, step) {
-  return shown(lang, step, {
+  const titles = {
     '-1': [['望远镜', 'Telescope'], ['物镜与目镜', 'Objective and eyepiece']],
     0: [['读放大率', 'Read the magnification'], ['记下两个焦距和镜筒长', 'Note both focal lengths and the tube']],
     1: [['公式', 'Formulas'], ['M ≈ −f物/f目', 'M ≈ −f obj / f eye']],
     2: [['物镜更长', 'Longer objective'], ['|M| 变大，镜筒变长', '|M| grows, the tube lengthens']],
     3: [['目镜更长', 'Longer eyepiece'], ['|M| 变小，镜筒变长', '|M| shrinks, the tube lengthens']],
     4: [['倒立', 'Inverted'], ['M 为负，镜筒长不是放大率', 'M is negative; tube length is not M']],
-  }, () => {
-    const fo = step === 2 ? 70 : 48;
-    const fe = step === 3 ? 28 : 16;
-    let s = line(40, 86, 280, 86, MUTED, 1, '4 3');
-    s += convexLens(90, 86 - fo, 86 + fo);
-    s += convexLens(90 + fo + fe + 20, 86 - fe - 6, 86 + fe + 6);
-    s += objArrow(40, 86, 20, true, INK);
-    s += objArrow(250, 86, 16, false, SEC);
-    return s;
-  });
+  };
+  const [title, cap] = titles[step];
+  const z = 42;
+  const fo = step === 2 ? 88 : 62;
+  const fe = step === 3 ? 36 : 22;
+  const objX = 28;
+  const lens1 = 52;
+  const lens2 = lens1 + fo + 14;
+  const eyeX = lens2 + fe + 10;
+  let body = tableBoard(220, 72);
+  body += oblPoly3([[14, 2, z - 5], [200, 2, z - 5], [200, 2, z + 5], [14, 2, z + 5]], { fill: '#d8d2c6', w: 1.2 });
+  body += candle3d(objX, z, { h: 20, lit: true, label: L(lang, '物', 'Obj') });
+  body += lensOnStand(lens1, z, Math.min(52, fo / 2 + 28));
+  body += lensOnStand(lens2, z, Math.min(44, fe / 2 + 24));
+  body += screenOnStand(eyeX, z, 40);
+  body += dimFront(lens1, lens2, 'f_o', SEC, z + 6);
+  body += dimFront(lens2, eyeX, 'f_e', RAY, z + 6);
+  if (step === 4) {
+    const [ax, ay] = obl(eyeX + 6, 38, z);
+    body += arrow(ax, ay + 10, ax, ay - 8, SEC, 1.4);
+    body += text(ax + 10, ay, L(lang, '倒', 'inv'), { anchor: 'start', size: 11, fill: SEC });
+  }
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawThermo(lang, step) {
@@ -3436,22 +3967,24 @@ function drawThermo(lang, step) {
     4: [['线性回算', 'Linear reading'], ['T = Tmin + 分数×(Tmax−Tmin)', 'T = Tmin + fraction×(Tmax−Tmin)']],
   }, () => {
     const frac = step === 0 ? 0.95 : step === 1 ? 0.5 : step === 2 ? 0.3 : 0.62;
-    let s = path('M 150 36 L 150 110 Q 140 132 150 132 Q 160 132 150 110', { w: 1.6 });
-    s += box(146, 110 - frac * 70, 8, frac * 70 + 16, { fill: RAY, op: 0.45, stroke: 'none' });
-    for (let i = 0; i <= 4; i++) s += line(150, 40 + i * 18, 166, 40 + i * 18, MUTED, 1);
+    const z = 44;
+    let s = tableBoard(220, 72);
+    s += thermometer3d(116, z, frac);
+    s += beaker3d(168, z, 28, 48, frac * 38);
     return s;
   });
 }
 
 function drawFilm(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['薄膜', 'Thin film'], ['前后两个反射面', 'Two reflecting faces']],
     0: [['反射', 'Reflection'], ['对照 2nt 与 (m+½)λ', 'Compare 2 n t with (m+½)λ']],
     1: [['调到亮纹', 'Tune a bright fringe'], ['两边相等', 'The two sides match']],
     2: [['改成透射', 'Switch to transmission'], ['条件变成 2nt = mλ', 'The condition becomes 2 n t = m λ']],
     3: [['折射率变大', 'Larger n'], ['光程变大', 'The optical path grows']],
     4: [['下一级', 'Next order'], ['m 增加 1', 'm increases by 1']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = line(40, 50, 120, 110, RAY, 1.4);
     s += box(120, 48, step === 3 ? 28 : 16, 70, { fill: SEC, op: 0.12 });
     s += ray(40, 70, 120, 70, RAY);
@@ -3463,14 +3996,15 @@ function drawFilm(lang, step) {
 }
 
 function drawDilation(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['光钟', 'Light clock'], ['一束光在两面镜子间来回', 'A light pulse between two mirrors']],
     0: [['很慢', 'Slow'], ['Δt 几乎等于 Δτ', 'Δt is almost Δτ']],
     1: [['速度增大', 'Larger speed'], ['坐标时间长于固有时', 'Coordinate time exceeds proper time']],
     2: [['固有时加倍', 'Double Δτ'], ['Δt 加倍，γ 不变', 'Δt doubles, γ does not']],
     3: [['核对 γ', 'Check γ'], ['Δt / Δτ = γ', 'Δt / Δτ = γ']],
     4: [['运动钟更慢', 'The moving clock records less'], ['它记下的是更短的 Δτ', 'What it records is the shorter Δτ']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const shift = step === 0 || step === -1 ? 0 : 50;
     let s = line(80, 50, 80, 120, INK, 1.6);
     s += line(80 + shift, 50, 80 + shift, 120, INK, 1.6);
@@ -3482,14 +4016,15 @@ function drawDilation(lang, step) {
 }
 
 function drawTransformer(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['变压器', 'Transformer'], ['同一铁芯上的两个线圈', 'Two coils on one core']],
     0: [['匝数相等', 'Equal turns'], ['电压相等，电流相等', 'Equal voltage, equal current']],
     1: [['升压', 'Step up'], ['n₂ > n₁，U₂ > U₁', 'n2 > n1, U2 > U1']],
     2: [['降压', 'Step down'], ['电压下降', 'Voltage falls']],
     3: [['功率', 'Power'], ['U₁I₁ = U₂I₂', 'U1 I1 = U2 I2']],
     4: [['输入电压', 'Input voltage'], ['U₂ 同比增大', 'U2 scales']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const n2 = step === 1 ? 6 : step === 2 ? 2 : 4;
     let s = path('M 90 40 L 90 120 L 200 120 L 200 40', { w: 2 });
     for (let i = 0; i < 4; i++) s += path(`M 90 ${r(52 + i * 16)} q -16 6 0 12`, { w: 1.3 });
@@ -3501,14 +4036,15 @@ function drawTransformer(lang, step) {
 }
 
 function drawTline(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['传输线', 'Transmission line'], ['单位长度的 L′ 和 C′', 'Inductance and capacitance per length']],
     0: [['读 Z₀ 与 v', 'Read Z0 and v'], ['由 L′、C′ 决定', 'Set by L′ and C′']],
     1: [['公式', 'Formulas'], ['Z₀ = √(L′/C′)', 'Z0 = √(L′/C′)']],
     2: [['C′ 增大', 'Larger C′'], ['Z₀ 和 v 都下降', 'Both Z0 and v fall']],
     3: [['L′ 增大', 'Larger L′'], ['Z₀ 上升，v 下降', 'Z0 rises, v falls']],
     4: [['同比增大', 'Same factor'], ['Z₀ 不变，v 下降', 'Z0 stays, v falls']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     let s = line(30, 60, 290, 60, INK, 1.6);
     s += line(30, 110, 290, 110, INK, 1.6);
     s += path('M 80 60 Q 90 80 80 100 Q 70 110 80 110', { w: 1.3 });
@@ -3529,30 +4065,35 @@ function drawTwoForce(lang, step) {
     3: [['不是同一物体', 'Not the same body'], ['那是相互作用', 'Those are an interaction pair']],
     4: [['改变质量', 'Change the mass'], ['平衡时 a 仍为 0', 'If it balances, a stays 0']],
   }, () => {
+    const z = 46;
     if (step === 3) {
-      let s = block(50, 70, 50, 30);
-      s += block(180, 70, 50, 30);
-      s += arrow(100, 85, 150, 85, RAY, 1.5);
-      s += arrow(180, 85, 130, 85, SEC, 1.5);
+      let s = tableBoard(220, 72);
+      s += block3d(48, z - 6, 40, 18, 22, { y0: 0 });
+      s += block3d(158, z - 6, 40, 18, 22, { y0: 0 });
+      s += oblArrow3d(88, 14, z, 138, 14, z, RAY, 1.5);
+      s += oblArrow3d(158, 14, z, 108, 14, z, SEC, 1.5);
       return s;
     }
-    let s = block(120, 70, 60, 36);
+    let s = tableBoard(220, 72);
+    s += block3d(102, z - 8, 48, 20, 28, { y0: 0 });
     const ang = step === 2 ? 40 : 0;
-    s += arrow(120, 88, 70, 88, RAY, 1.7);
-    s += arrow(180, 88 - ang, 240, 88 + ang, SEC, 1.7);
+    const rad = (ang * Math.PI) / 180;
+    s += oblArrow3d(102, 16, z, 58, 16, z, RAY, 1.7);
+    s += oblArrow3d(150, 16, z, 150 + Math.cos(rad) * 48, 16 + Math.sin(rad) * 48, z, SEC, 1.7);
     return s;
   });
 }
 
 function drawPacket(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['波包', 'Wave packet'], ['一群波叠成一个包', 'A group of waves in one packet']],
     0: [['中心移动', 'The centre moves'], ['速度对应 ℏk₀/m', 'The speed follows ℏ k0 / m']],
     1: [['k₀ 增大', 'Larger k0'], ['中心跑得更快', 'The centre runs faster']],
     2: [['宽度随时间', 'Width with time'], ['σ(t) 变大', 'σ(t) grows']],
     3: [['起始更窄', 'Narrower start'], ['稍后散得更快', 'Later it spreads faster']],
     4: [['k₀ = 0', 'k0 = 0'], ['中心不动，宽度仍增加', 'The centre stays; the width still grows']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const cx = step === 1 ? 210 : step === 4 ? 120 : 160;
     const sig = step === 3 ? 18 : step === 2 ? 48 : 30;
     const pts = [];
@@ -3567,14 +4108,15 @@ function drawPacket(lang, step) {
 }
 
 function drawGuide(lang, step) {
-  return shown(lang, step, {
+  return obliqueShown(lang, step, {
     '-1': [['波导宽度', 'Guide width'], ['截止频率 fc = c/(2a)', 'Cutoff fc = c/(2a)']],
     0: [['读 fc', 'Read fc'], ['由宽度 a 决定', 'Set by the width a']],
     1: [['低于截止', 'Below cutoff'], ['标明不传播', 'Marked as not propagating']],
     2: [['高于截止', 'Above cutoff'], ['可以传播', 'It can propagate']],
     3: [['加宽', 'Wider guide'], ['fc 下降', 'fc falls']],
     4: [['截止以下', 'Below cutoff'], ['不要画成行波', 'Do not draw a travelling wave']],
-  }, () => {
+  }, (M) => {
+    const { line, dash, arrow, ray, text, box, circ, poly, polyLine, path, axes, axisLabels, hDim, vDim, ground, crosses, hatchesH, hatchesV, chargeBall, sinePts, block, beaker, cylinder, springV, pendulum, magnetBar, convexLens, concaveLens, screenPlate, piston } = M;
     const a = step === 3 ? 70 : 46;
     const y = 80;
     let s = line(40, y - a / 2, 280, y - a / 2, INK, 1.6);
@@ -3602,11 +4144,16 @@ function drawWork(lang, step) {
   }, () => {
     const ang = step === 1 ? 90 : step === 2 ? 180 : step === 4 ? 60 : 0;
     const rad = (ang * Math.PI) / 180;
-    let s = arrow(40, 100, 180, 100, INK, 1.6);
-    s += text(110, 116, 's', { size: 12 });
-    s += arrow(70, 100, 70 + Math.cos(rad) * 50, 100 - Math.sin(rad) * 50, RAY, 1.8);
-    s += text(70 + Math.cos(rad) * 56, 96 - Math.sin(rad) * 56, 'F', { size: 13, fill: RAY });
-    if (step === 3) s += text(220, 80, 't↑', { size: 14, fill: SEC });
+    const z = 46;
+    let s = tableBoard(220, 72);
+    s += block3d(80, z - 8, 44, 14, 26, { y0: 0 });
+    s += oblArrow3d(52, 16, z, 168, 16, z, INK, 1.6);
+    s += text(...obl(110, 32, z), 's', { size: 12 });
+    const fx = 86 + Math.cos(rad) * 40;
+    const fy = 16 + Math.sin(rad) * 40;
+    s += oblArrow3d(86, 16, z, fx, fy, z, RAY, 1.8);
+    s += text(...obl(fx + 6, fy + 4, z), 'F', { anchor: 'start', size: 13, fill: RAY });
+    if (step === 3) s += text(...obl(196, 40, z), 't↑', { anchor: 'start', size: 14, fill: SEC });
     return s;
   });
 }

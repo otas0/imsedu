@@ -11,6 +11,10 @@ const SEC = '#1d4e89';
 const MUTED = '#5e584e';
 const PAPER = '#fffdf8';
 const H = 160;
+const H3 = 188;
+/** Oblique (cabinet) foreshortening — PEP/沪科 lab plates use this depth cue. */
+const OBL_KX = 0.52;
+const OBL_KY = 0.30;
 
 function r(n) {
   const v = Math.round(Number(n) * 10) / 10;
@@ -98,12 +102,225 @@ function heading(lang, zh, en) {
   return text(14, 16, L(lang, zh, en), { anchor: 'start', size: 12, bold: true });
 }
 
-function caption(lang, zh, en) {
-  return text(160, 152, L(lang, zh, en), { size: 11, fill: MUTED });
+function caption(lang, zh, en, h = H) {
+  return text(160, h - 8, L(lang, zh, en), { size: 11, fill: MUTED });
 }
 
-function panel(lang, titleZh, titleEn, capZh, capEn, body) {
-  return wrap(heading(lang, titleZh, titleEn) + body + caption(lang, capZh, capEn));
+function panel(lang, titleZh, titleEn, capZh, capEn, body, h = H) {
+  return wrap(heading(lang, titleZh, titleEn) + body + caption(lang, capZh, capEn, h), h);
+}
+
+/** Map lab (x right, y up, z into the table) → SVG. Origin at table front-left. */
+function obl(x, y, z, ox = 36, oy = 158) {
+  return [ox + x + z * OBL_KX, oy - y + z * OBL_KY];
+}
+
+function oblLine(a, b, color = INK, w = 1.5, dashPat = '') {
+  const [x1, y1] = obl(a[0], a[1], a[2]);
+  const [x2, y2] = obl(b[0], b[1], b[2]);
+  return line(x1, y1, x2, y2, color, w, dashPat);
+}
+
+function oblPoly3(pts, o = {}) {
+  return poly(pts.map((p) => obl(p[0], p[1], p[2])), o);
+}
+
+function oblPathPts(pts, o = {}) {
+  if (!pts || pts.length < 2) return '';
+  const d = pts.map((p, i) => {
+    const [x, y] = obl(p[0], p[1], p[2]);
+    return `${i ? 'L' : 'M'}${r(x)} ${r(y)}`;
+  }).join(' ');
+  return path(d, o);
+}
+
+function tableBoard(w = 240, d = 110) {
+  return oblPoly3([[0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d]], { fill: '#f7f1e6', w: 1.4 }) +
+    oblPoly3([[0, 0, 0], [w, 0, 0], [w, -6, 0], [0, -6, 0]], { fill: '#ebe4d6', w: 1.2 }) +
+    oblPoly3([[w, 0, 0], [w, 0, d], [w, -6, d], [w, -6, 0]], { fill: '#e2d9c8', w: 1.1 });
+}
+
+function glassPlate(x, z0, z1, h = 78) {
+  // Vertical glass along depth; slight tint like a textbook plate.
+  const face = oblPoly3(
+    [[x, 0, z0], [x, h, z0], [x, h, z1], [x, 0, z1]],
+    { fill: 'rgba(160, 190, 210, 0.22)', w: 1.5 },
+  );
+  const rim = oblLine([x, h, z0], [x, h, z1], INK, 1.3) +
+    oblLine([x, 0, z0], [x, h, z0], INK, 1.3) +
+    oblLine([x, 0, z1], [x, h, z1], INK, 1.3);
+  return face + rim;
+}
+
+function clampBlock(x, z, label) {
+  const s = oblPoly3(
+    [[x - 5, 0, z - 4], [x + 5, 0, z - 4], [x + 5, 8, z - 4], [x - 5, 8, z - 4]],
+    { fill: '#c8c4bc', w: 1.2 },
+  ) + oblPoly3(
+    [[x - 5, 0, z - 4], [x - 5, 0, z + 4], [x - 5, 8, z + 4], [x - 5, 8, z - 4]],
+    { fill: '#b4b0a8', w: 1.1 },
+  );
+  const [lx, ly] = obl(x, -2, z);
+  return s + text(lx, ly + 12, label, { size: 10, fill: MUTED });
+}
+
+function candle3d(x, z, o = {}) {
+  const h = o.h == null ? 28 : o.h;
+  const lit = !!o.lit;
+  const ghost = !!o.ghost;
+  const thin = !!o.thin;
+  const rad = thin ? 3.2 : 5.5;
+  const fill = ghost ? 'rgba(200,200,200,0.35)' : PAPER;
+  const stroke = ghost ? MUTED : INK;
+  const sw = ghost ? 1.1 : 1.4;
+  // Body as a short prism + ellipse top.
+  let s = oblPoly3(
+    [[x - rad, 0, z - rad * 0.4], [x + rad, 0, z - rad * 0.4], [x + rad, h, z - rad * 0.4], [x - rad, h, z - rad * 0.4]],
+    { fill, stroke, w: sw },
+  );
+  const [tcx, tcy] = obl(x, h, z);
+  s += `<ellipse cx="${r(tcx)}" cy="${r(tcy)}" rx="${r(rad + 1)}" ry="${r(rad * 0.45)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  if (lit && !ghost) {
+    const [fx, fy] = obl(x, h + 14, z);
+    s += path(
+      `M ${r(tcx)} ${r(tcy - 2)} C ${r(tcx + 5)} ${r(tcy - 8)}, ${r(tcx + 3)} ${r(fy)}, ${r(fx)} ${r(fy)} C ${r(tcx - 3)} ${r(fy)}, ${r(tcx - 5)} ${r(tcy - 8)}, ${r(tcx)} ${r(tcy - 2)}`,
+      { stroke: RAY, fill: '#ffe0c2', w: 1.1 },
+    );
+    // Soft glow on the table near the base (textbook “lit” cue).
+    const [bx, by] = obl(x, 0, z);
+    s += circ(bx, by, 14, { fill: RAY, op: 0.12, stroke: 'none' });
+  }
+  if (o.label) {
+    const [lx, ly] = obl(x, h + (lit ? 22 : 10), z);
+    s += text(lx, ly, o.label, { size: 12, bold: true, fill: ghost ? MUTED : INK });
+  }
+  return s;
+}
+
+function standPost(x, z, h = 70) {
+  return oblLine([x, 0, z], [x, h, z], INK, 2) +
+    oblPoly3([[x - 8, 0, z - 6], [x + 8, 0, z - 6], [x + 8, 0, z + 6], [x - 8, 0, z + 6]], { fill: '#ddd8ce', w: 1.2 });
+}
+
+function lensOnStand(x, z, h = 56) {
+  const [cx, cy] = obl(x, h / 2, z);
+  return standPost(x, z, 8) +
+    path(`M ${r(cx)} ${r(cy - 28)} Q ${r(cx + 9)} ${r(cy)} ${r(cx)} ${r(cy + 28)} Q ${r(cx - 9)} ${r(cy)} ${r(cx)} ${r(cy - 28)} Z`, { fill: 'rgba(180,210,230,0.25)', w: 1.6 }) +
+    oblLine([x, 8, z], [x, h - 4, z], INK, 1.2);
+}
+
+function screenOnStand(x, z, h = 52) {
+  return standPost(x, z, 8) +
+    oblPoly3([[x - 2, 10, z - 18], [x - 2, 10 + h, z - 18], [x - 2, 10 + h, z + 18], [x - 2, 10, z + 18]], { fill: '#f3efe4', w: 1.4 }) +
+    oblPoly3([[x - 2, 10, z + 18], [x + 3, 10, z + 18], [x + 3, 10 + h, z + 18], [x - 2, 10 + h, z + 18]], { fill: '#e8e2d4', w: 1.1 });
+}
+
+/** Vertical card with a central hole (pinhole imaging). */
+function pinholeCard(x, z0, z1, h = 70, hole = 5) {
+  const mid = (z0 + z1) / 2;
+  const top = h / 2 + hole;
+  const bot = h / 2 - hole;
+  return oblPoly3([[x, 0, z0], [x, h, z0], [x, h, mid - hole], [x, top, mid - hole], [x, top, mid + hole], [x, h, mid + hole], [x, h, z1], [x, 0, z1], [x, 0, mid + hole], [x, bot, mid + hole], [x, bot, mid - hole], [x, 0, mid - hole]], {
+    fill: '#2a2a2a', stroke: INK, w: 1.2,
+  });
+}
+
+/** Short rectangular block sitting on the table (or raised by y0). */
+function block3d(x, z, w, h, d, o = {}) {
+  const y0 = o.y0 || 0;
+  const fill = o.fill || PAPER;
+  let s = oblPoly3([[x, y0, z], [x + w, y0, z], [x + w, y0 + h, z], [x, y0 + h, z]], { fill, w: 1.3 });
+  s += oblPoly3([[x + w, y0, z], [x + w, y0, z + d], [x + w, y0 + h, z + d], [x + w, y0 + h, z]], { fill: '#e8e2d4', w: 1.2 });
+  s += oblPoly3([[x, y0 + h, z], [x + w, y0 + h, z], [x + w, y0 + h, z + d], [x, y0 + h, z + d]], { fill: '#f7f1e6', w: 1.2 });
+  if (o.label) {
+    const [lx, ly] = obl(x + w / 2, y0 + h / 2, z + d / 2);
+    s += text(lx, ly + 3, o.label, { size: 10, fill: o.labelFill || INK });
+  }
+  return s;
+}
+
+/** Graduated cylinder in oblique view. */
+function cylinder3d(cx, z, rad, h, level) {
+  const [bx, by] = obl(cx, 0, z);
+  const [tx, ty] = obl(cx, h, z);
+  let s = path(
+    `M ${r(bx - rad)} ${r(by)} L ${r(tx - rad)} ${r(ty)} L ${r(tx + rad)} ${r(ty)} L ${r(bx + rad)} ${r(by)} Z`,
+    { fill: 'rgba(180,210,230,0.12)', w: 1.4 },
+  );
+  s += `<ellipse cx="${r(bx)}" cy="${r(by)}" rx="${r(rad)}" ry="${r(rad * 0.35)}" fill="none" stroke="${INK}" stroke-width="1.3"/>`;
+  s += `<ellipse cx="${r(tx)}" cy="${r(ty)}" rx="${r(rad)}" ry="${r(rad * 0.35)}" fill="none" stroke="${INK}" stroke-width="1.3"/>`;
+  if (level != null) {
+    const [lx, ly] = obl(cx, level, z);
+    s += `<ellipse cx="${r(lx)}" cy="${r(ly)}" rx="${r(rad - 1)}" ry="${r((rad - 1) * 0.35)}" fill="${SEC}" fill-opacity="0.22" stroke="${SEC}" stroke-width="1.1"/>`;
+  }
+  // Tick marks.
+  for (let i = 1; i <= 4; i++) {
+    const yy = (h * i) / 5;
+    const [a, b] = obl(cx + rad - 2, yy, z);
+    const [c, d] = obl(cx + rad + 4, yy, z);
+    s += line(a, b, c, d, MUTED, 1);
+  }
+  return s;
+}
+
+/** Open beaker / overflow can on the table. */
+function beaker3d(cx, z, rad, h, level, o = {}) {
+  const [bx, by] = obl(cx, 0, z);
+  const [tx, ty] = obl(cx, h, z);
+  let s = path(
+    `M ${r(bx - rad)} ${r(by)} L ${r(tx - rad)} ${r(ty)} L ${r(tx + rad)} ${r(ty)} L ${r(bx + rad)} ${r(by)} Z`,
+    { fill: 'rgba(180,210,230,0.1)', w: 1.5 },
+  );
+  s += `<ellipse cx="${r(bx)}" cy="${r(by)}" rx="${r(rad)}" ry="${r(rad * 0.38)}" fill="none" stroke="${INK}" stroke-width="1.4"/>`;
+  s += `<ellipse cx="${r(tx)}" cy="${r(ty)}" rx="${r(rad)}" ry="${r(rad * 0.38)}" fill="none" stroke="${INK}" stroke-width="1.4"/>`;
+  if (level != null) {
+    const [lx, ly] = obl(cx, level, z);
+    s += `<ellipse cx="${r(lx)}" cy="${r(ly)}" rx="${r(rad - 2)}" ry="${r((rad - 2) * 0.38)}" fill="${SEC}" fill-opacity="0.2" stroke="${SEC}" stroke-width="1.1"/>`;
+  }
+  if (o.spout) {
+    // Overflow spout toward +x.
+    s += oblPoly3(
+      [[cx + rad - 2, h * 0.55, z], [cx + rad + 18, h * 0.42, z + 4], [cx + rad + 18, h * 0.5, z + 4], [cx + rad - 2, h * 0.62, z]],
+      { fill: PAPER, w: 1.3 },
+    );
+  }
+  return s;
+}
+
+/** Knife-edge fulcrum on the table. */
+function fulcrum3d(x, z) {
+  return oblPoly3([[x - 14, 0, z - 8], [x + 14, 0, z - 8], [x, 14, z]], { fill: '#ddd8ce', w: 1.4 }) +
+    oblPoly3([[x + 14, 0, z - 8], [x + 14, 0, z + 8], [x, 14, z + 4], [x, 14, z]], { fill: '#cfc9bc', w: 1.2 });
+}
+
+/** Spring hanging from a stand (测力计 style). */
+function springScale3d(x, z, stretch, o = {}) {
+  const top = 78;
+  const hook = top - 14 - stretch;
+  let s = standPost(x, z, top);
+  // Scale body.
+  s += oblPoly3([[x - 8, top - 70, z - 4], [x + 8, top - 70, z - 4], [x + 8, top - 8, z - 4], [x - 8, top - 8, z - 4]], { fill: PAPER, w: 1.3 });
+  // Coil.
+  const turns = o.fat ? 8 : 6;
+  const amp = o.fat ? 7 : 5;
+  let d = '';
+  const y1 = top - 8;
+  const y2 = Math.max(hook + 8, 18);
+  for (let i = 0; i <= turns; i++) {
+    const yy = y1 - (i / turns) * (y1 - y2);
+    const side = i % 2 === 0 ? amp : -amp;
+    const [px, py] = obl(x + side, yy, z);
+    d += `${i ? 'L' : 'M'}${r(px)} ${r(py)} `;
+  }
+  s += path(d.trim(), { w: 1.5 });
+  const [hx, hy] = obl(x, hook, z);
+  s += path(`M ${r(hx - 6)} ${r(hy)} L ${r(hx + 6)} ${r(hy)} L ${r(hx)} ${r(hy + 8)} Z`, { w: 1.3 });
+  if (o.limitY != null) {
+    const [a, b] = obl(x - 18, o.limitY, z);
+    const [c, dd] = obl(x + 18, o.limitY, z);
+    s += dash(a, b, c, dd, SEC, 1.1);
+  }
+  return s;
 }
 
 function arrow(x1, y1, x2, y2, color = INK, w = 1.6) {
@@ -409,189 +626,99 @@ function fTick(x, axis, label, below = false) {
 /* ---------- optics ---------- */
 
 function drawConvex(lang, step) {
-  const axis = 78;
-  const benchY = 132;
+  // Optical bench in oblique view: candle · lens · screen (textbook light-bench lab).
   const cases = {
-    '-1': { title: ['光具座共轴', 'Coaxial bench'], cap: ['烛焰、光心、屏心等高', 'Flame, centre, and screen coaxial'], prep: true },
-    0: { title: ['u > 2f', 'u > 2f'], cap: ['倒立缩小实像', 'Inverted diminished real'], lensX: 178, f: 34, u: 112, objH: 32 },
-    1: { title: ['u = 2f', 'u = 2f'], cap: ['倒立等大实像', 'Inverted same-size real'], lensX: 154, f: 46, u: 92, objH: 26 },
-    2: { title: ['f < u < 2f', 'f < u < 2f'], cap: ['倒立放大实像', 'Inverted magnified real'], lensX: 112, f: 40, u: 56, objH: 16 },
-    3: { title: ['u ≈ f', 'u ≈ f'], cap: ['屏上无清晰实像', 'No sharp real image'], lensX: 148, f: 56, u: 56, objH: 24, atFocus: true },
-    4: { title: ['u < f', 'u < f'], cap: ['正立放大虚像', 'Erect magnified virtual'], lensX: 214, f: 70, u: 40, objH: 16, virtual: true },
-    5: { title: ['薄透镜方程', 'Thin-lens equation'], cap: ['1/u + 1/v = 1/f', '1/u + 1/v = 1/f'], lensX: 168, f: 40, u: 96, objH: 28, law: true },
+    '-1': { title: ['光具座共轴', 'Coaxial bench'], cap: ['烛焰、光心、屏心等高', 'Flame, centre, and screen coaxial'], u: 70, v: 90, f: 40, prep: true },
+    0: { title: ['u > 2f', 'u > 2f'], cap: ['倒立缩小实像', 'Inverted diminished real'], u: 100, f: 36 },
+    1: { title: ['u = 2f', 'u = 2f'], cap: ['倒立等大实像', 'Inverted same-size real'], u: 80, f: 40 },
+    2: { title: ['f < u < 2f', 'f < u < 2f'], cap: ['倒立放大实像', 'Inverted magnified real'], u: 56, f: 40 },
+    3: { title: ['u ≈ f', 'u ≈ f'], cap: ['屏上无清晰实像', 'No sharp real image'], u: 40, f: 40, atFocus: true },
+    4: { title: ['u < f', 'u < f'], cap: ['正立放大虚像', 'Erect magnified virtual'], u: 28, f: 48, virtual: true },
+    5: { title: ['薄透镜方程', 'Thin-lens equation'], cap: ['1/u + 1/v = 1/f', '1/u + 1/v = 1/f'], u: 88, f: 38, law: true },
   };
   const c = cases[step];
-  let body = bench(benchY);
-  body += dash(36, axis, 292, axis, MUTED, 1.1);
-  if (c.prep) {
-    const lensX = 168;
-    body += candle(78, benchY, axis - 18);
-    body += objArrow(78, axis, 26, true, INK);
-    body += convexLens(lensX, 42, benchY);
-    body += line(lensX, benchY, lensX, benchY + 0, INK, 1);
-    body += screenPlate(248, 48, benchY);
-    body += text(78, axis + 18, L(lang, '物', 'Object'), { size: 10, fill: MUTED });
-    body += text(lensX, 38, L(lang, '透镜', 'Lens'), { size: 10 });
-    body += text(252, 44, L(lang, '光屏', 'Screen'), { size: 10, fill: SEC });
-    body += dash(78, axis, 248, axis, SEC, 1);
-    return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
+  const z = 44;
+  const lensX = 130;
+  const objX = lensX - c.u;
+  let v = c.v;
+  if (v == null && !c.atFocus && !c.virtual) {
+    const inv = 1 / c.f - 1 / c.u;
+    v = inv > 0.001 ? 1 / inv : 120;
   }
-  const { lensX, f, u, objH } = c;
-  const objX = lensX - u;
-  const tipY = axis - objH;
-  body += convexLens(lensX, axis - 48, benchY);
-  body += fTick(lensX - f, axis, 'F', true);
-  body += fTick(lensX + f, axis, "F'", true);
-  body += fTick(lensX - 2 * f, axis, '2F');
-  if (lensX + 2 * f < 308) body += fTick(lensX + 2 * f, axis, "2F'");
-  body += candle(objX, benchY, tipY + 6);
-  body += objArrow(objX, axis, objH, true, INK);
-  body += text(objX, benchY + 12 > 148 ? 146 : Math.min(axis + objH + 14, 142), L(lang, '物', 'Obj'), { size: 10 });
-
-  if (c.atFocus) {
-    const slope = objH / f;
-    const xR = 292;
-    const yParallel = tipY + slope * (xR - lensX);
-    const yCenter = axis + slope * (xR - lensX);
-    body += ray(objX, tipY, lensX, tipY);
-    body += ray(lensX, tipY, xR, yParallel);
-    body += ray(objX, tipY, xR, yCenter);
-    body += screenPlate(276, 46, benchY);
-    body += text(286, 42, L(lang, '无实像', 'no image'), { size: 10, fill: RAY });
-    return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
-  }
-
-  const inv = 1 / f - 1 / u;
-  const v = 1 / inv;
-  const imgX = lensX + v;
-  const imgH = Math.abs(objH * v / u);
-  const erect = v < 0;
-
-  if (!erect) {
-    const imgTip = axis + imgH;
-    const fPrime = lensX + f;
-    body += screenPlate(imgX - 2, 46, benchY);
-    body += objArrow(imgX, axis, imgH, false, SEC);
-    // Three textbook rays: parallel→F′, through centre, through F→parallel.
-    body += ray(objX, tipY, lensX, tipY);
-    body += ray(lensX, tipY, fPrime, axis);
-    if (imgX > fPrime) body += ray(fPrime, axis, imgX, imgTip);
-    body += ray(objX, tipY, imgX, imgTip);
-    if (u > f + 2) {
-      body += ray(objX, tipY, lensX, imgTip);
-      body += ray(lensX, imgTip, Math.min(imgX + 24, 300), imgTip);
-    }
-    body += text(imgX, axis + imgH + 12, L(lang, '像', 'Img'), { size: 10, fill: SEC });
-    if (c.law) {
-      body += hDim(objX, lensX, 30, 'u');
-      body += hDim(lensX, imgX, 30, 'v');
-      body += hDim(lensX, lensX + f, axis + 28, 'f', RAY);
-    }
+  const scrX = c.virtual || c.atFocus ? lensX + 110 : lensX + Math.min(v, 120);
+  let body = tableBoard(260, 92);
+  // Optical-bench rail.
+  body += oblPoly3([[20, 2, z - 8], [250, 2, z - 8], [250, 2, z + 8], [20, 2, z + 8]], { fill: '#d8d2c6', w: 1.2 });
+  body += candle3d(objX, z, { h: 26, lit: true, label: L(lang, '物', 'Obj') });
+  body += lensOnStand(lensX, z, 58);
+  const [lx, ly] = obl(lensX, 66, z);
+  body += text(lx, ly - 4, L(lang, '透镜', 'Lens'), { size: 10 });
+  if (!c.virtual) {
+    body += screenOnStand(scrX, z, c.atFocus ? 48 : 50);
+    const [sx, sy] = obl(scrX, 68, z);
+    body += text(sx + 6, sy, c.atFocus ? L(lang, '无实像', 'no image') : L(lang, '光屏', 'Screen'), {
+      anchor: 'start', size: 10, fill: c.atFocus ? RAY : SEC,
+    });
   } else {
-    const imgTip = axis - imgH;
-    body += screenPlate(286, 50, benchY);
-    body += text(294, 46, L(lang, '无实像', 'none'), { size: 10, fill: MUTED });
-    const farF = lensX + f;
-    const yAtEdge = tipY + ((axis - tipY) / f) * (300 - lensX);
-    body += ray(objX, tipY, lensX, tipY);
-    body += ray(lensX, tipY, 300, Math.min(148, yAtEdge));
-    body += ray(objX, tipY, 300, axis + (objH / u) * (300 - lensX));
-    body += dash(lensX, tipY, imgX, imgTip, SEC, 1.2);
-    body += dash(lensX, axis, imgX, imgTip, SEC, 1.2);
-    body += dash(imgX, axis, imgX, imgTip, SEC, 1.3);
-    body += arrow(imgX, axis, imgX, imgTip, SEC, 1.6);
-    body += text(imgX, imgTip - 6, L(lang, '虚像', 'virtual'), { size: 10, fill: SEC });
+    body += screenOnStand(scrX, z, 48);
+    const [ix, iy] = obl(lensX - 36, 40, z);
+    body += text(ix, iy, L(lang, '虚像', 'virtual'), { size: 11, fill: SEC });
+    body += dash(...obl(objX, 40, z), ...obl(lensX - 20, 52, z), SEC, 1.2);
   }
-  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
+  const pO = obl(objX, 0, z);
+  const pL = obl(lensX, 0, z);
+  const pS = obl(scrX, 0, z);
+  body += hDim(pO[0], pL[0], 178, 'u');
+  if (!c.atFocus && !c.virtual) body += hDim(pL[0], pS[0], 178, 'v', SEC);
+  if (c.law) {
+    const pF = obl(lensX + c.f, 0, z);
+    body += hDim(pL[0], pF[0], 168, 'f', RAY);
+  }
+  if (c.prep) {
+    body += oblLine([objX, 40, z], [scrX, 40, z], SEC, 1.1, '4 3');
+  }
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
 }
 
 function drawPinhole(lang, step) {
+  // Candle · pinhole card · screen on the optical bench (oblique).
   const specs = {
-    '-1': { u: 78, v: 78, d: 8, objH: 26, title: ['小孔成像', 'Pinhole'], cap: ['物、小孔、光屏', 'Object, hole, screen'], ideal: true },
-    0: { u: 72, v: 78, d: 5, objH: 28, title: ['倒立的像', 'Inverted image'], cap: ['相似三角形', 'Similar triangles'], ideal: true },
-    1: { u: 70, v: 72, d: 16, objH: 22, title: ['光斑直径', 'Spot diameter'], cap: ['d (u+v) / u', 'd (u+v) / u'] },
-    2: { u: 70, v: 72, d: 6, objH: 22, title: ['孔径变小', 'Smaller hole'], cap: ['光斑变小', 'Spot shrinks'] },
-    3: { u: 108, v: 64, d: 16, objH: 24, title: ['物距变大', 'Larger u'], cap: ['同一孔径光斑变小', 'Spot shrinks for fixed d'] },
-    4: { u: 64, v: 108, d: 16, objH: 20, title: ['屏距变大', 'Larger v'], cap: ['光斑变大', 'Spot grows'] },
+    '-1': { u: 70, v: 70, d: 6, title: ['小孔成像', 'Pinhole'], cap: ['物、小孔、光屏', 'Object, hole, screen'], ideal: true },
+    0: { u: 64, v: 72, d: 5, title: ['倒立的像', 'Inverted image'], cap: ['相似三角形', 'Similar triangles'], ideal: true },
+    1: { u: 60, v: 64, d: 14, title: ['光斑直径', 'Spot diameter'], cap: ['d (u+v) / u', 'd (u+v) / u'] },
+    2: { u: 60, v: 64, d: 5, title: ['孔径变小', 'Smaller hole'], cap: ['光斑变小', 'Spot shrinks'] },
+    3: { u: 96, v: 56, d: 14, title: ['物距变大', 'Larger u'], cap: ['同一孔径光斑变小', 'Spot shrinks for fixed d'] },
+    4: { u: 52, v: 96, d: 14, title: ['屏距变大', 'Larger v'], cap: ['光斑变大', 'Spot grows'] },
   };
   const c = specs[step];
-  const plateX = 156;
-  const axis = 86;
+  const z = 44;
+  const plateX = 120;
   const objX = plateX - c.u;
-  const scrX = Math.min(292, plateX + c.v);
-  const vDraw = scrX - plateX;
-  const gap = Math.max(3, c.d / 2);
-  const spot = c.d * (c.u + vDraw) / c.u;
-  const imgH = c.objH * vDraw / c.u;
-  let body = '';
-  body += box(plateX - 3, 32, 6, axis - gap - 32, { fill: INK, stroke: 'none' });
-  body += box(plateX - 3, axis + gap, 6, 132 - axis - gap, { fill: INK, stroke: 'none' });
-  body += objArrow(objX, axis, c.objH, true);
-  body += text(objX, axis + 14, L(lang, '物', 'Obj'), { size: 10 });
-  body += screenPlate(scrX, 36, 134);
-  if (c.ideal) {
-    const imgTip = axis + imgH;
-    body += objArrow(scrX + 4, axis, Math.min(imgH, 48), false, SEC);
-    body += ray(objX, axis - c.objH, plateX, axis);
-    body += ray(plateX, axis, scrX, imgTip);
-    body += dash(objX, axis, scrX, axis, MUTED, 1);
-    body += dash(objX, axis - c.objH, scrX, imgTip, SEC, 1.1);
-    body += text(scrX + 4, axis + Math.min(imgH, 48) + 12, L(lang, '像', 'Img'), { size: 10, fill: SEC });
-  } else {
-    const yTop = axis - spot / 2;
-    const yBot = axis + spot / 2;
-    body += line(scrX, yTop, scrX + 8, yTop, RAY, 1.4);
-    body += line(scrX, yBot, scrX + 8, yBot, RAY, 1.4);
-    body += box(scrX, yTop, 8, Math.max(2, yBot - yTop), { fill: RAY, op: 0.2, stroke: 'none' });
-    body += ray(objX, axis - c.objH, plateX, axis - gap);
-    body += ray(plateX, axis - gap, scrX, yTop);
-    body += line(objX, axis - c.objH, plateX, axis + gap, RAY, 1.2);
-    body += line(plateX, axis + gap, scrX, yBot, RAY, 1.2);
-    body += vDim(scrX + 18, yTop, yBot, L(lang, '光斑', 'spot'), RAY);
-  }
-  body += hDim(objX, plateX, 28, 'u');
-  body += hDim(plateX, scrX, 28, 'v');
-  body += text(plateX, 148, 'd', { size: 10, fill: MUTED });
-  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
-}
-
-function reflectScene(lang, theta, opt) {
-  const mx = 168;
-  const my = 112;
-  const th = (theta * Math.PI) / 180;
-  const len = 78;
-  const x1 = mx - Math.sin(th) * len;
-  const y1 = my - Math.cos(th) * len;
-  const x2 = mx + Math.sin(th) * len;
-  const y2 = my - Math.cos(th) * len;
-  let body = line(36, my, 292, my, INK, 1.8) + hatchesH(36, 292, my, true);
-  body += dash(mx, my, mx, 30, MUTED, 1.2);
-  body += text(mx + 10, 40, L(lang, '法线', 'normal'), { anchor: 'start', size: 10, fill: MUTED });
-  if (theta < 1) {
-    body += ray(mx - 8, 36, mx - 8, my, RAY);
-    body += ray(mx + 8, my, mx + 8, 36, RAY);
-    body += text(mx, 28, 'θ = 0', { size: 11, fill: RAY });
-  } else {
-    body += ray(x1, y1, mx, my, RAY);
-    body += ray(mx, my, x2, y2, RAY);
-    body += text(mx - 28, my - 36, 'θ', { size: 12, fill: RAY });
-    body += text(mx + 22, my - 36, 'θ', { size: 12, fill: RAY });
-  }
-  if (opt.glancing) {
-    body += text(mx - 54, my - 12, '90°−θ', { size: 10, fill: MUTED });
-    body += text(220, 96, L(lang, '定律用对法线的角', 'Law uses the normal'), { size: 10, fill: MUTED, anchor: 'start' });
-  }
-  if (opt.second) {
-    const th2 = (28 * Math.PI) / 180;
-    const len2 = 64;
-    body += ray(mx - Math.sin(th2) * len2, my - Math.cos(th2) * len2, mx, my, SEC);
-    body += ray(mx, my, mx + Math.sin(th2) * len2, my - Math.cos(th2) * len2, SEC);
-  }
-  body += text(48, my - 8, L(lang, '镜面', 'mirror'), { anchor: 'start', size: 10, fill: MUTED });
-  return panel(lang, opt.title[0], opt.title[1], opt.cap[0], opt.cap[1], body);
+  const scrX = plateX + Math.min(c.v, 110);
+  let body = tableBoard(250, 92);
+  body += oblPoly3([[16, 2, z - 8], [240, 2, z - 8], [240, 2, z + 8], [16, 2, z + 8]], { fill: '#d8d2c6', w: 1.2 });
+  body += candle3d(objX, z, { h: 26, lit: true, label: L(lang, '物', 'Obj') });
+  body += pinholeCard(plateX, z - 22, z + 22, 68, Math.max(3, c.d / 2));
+  const [px, py] = obl(plateX, 74, z);
+  body += text(px, py, 'd', { size: 10, fill: MUTED });
+  body += screenOnStand(scrX, z, 50);
+  const [sx, sy] = obl(scrX, 68, z);
+  body += text(sx + 8, sy, c.ideal ? L(lang, '像', 'Img') : L(lang, '光斑', 'spot'), {
+    anchor: 'start', size: 10, fill: SEC,
+  });
+  // Ray cue through the hole.
+  body += oblLine([objX, 40, z], [plateX, 34, z], RAY, 1.3);
+  body += oblLine([plateX, 34, z], [scrX, c.ideal ? 24 : 40, z], RAY, 1.3);
+  const pO = obl(objX, 0, z);
+  const pP = obl(plateX, 0, z);
+  const pS = obl(scrX, 0, z);
+  body += hDim(pO[0], pP[0], 178, 'u');
+  body += hDim(pP[0], pS[0], 178, 'v', SEC);
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
 }
 
 function drawReflection(lang, step) {
+  // Vertical mirror plate on the table + incident / reflected rays (lab protractor setup).
   const steps = {
     '-1': { th: 42, title: ['光的反射', 'Reflection'], cap: ['入射光线、法线、反射光线', 'Incident ray, normal, reflected ray'] },
     0: { th: 40, title: ['入射角 = 反射角', 'i = r'], cap: ['两角相等', 'The angles match'] },
@@ -601,50 +728,111 @@ function drawReflection(lang, step) {
     4: { th: 55, title: ['再核一次', 'Check again'], cap: ['另一条光线仍是 i = r', 'Another ray still has i = r'], second: true },
   };
   const c = steps[step];
-  return reflectScene(lang, c.th, c);
+  const mx = 130;
+  const z = 48;
+  const hitY = 36;
+  const th = (c.th * Math.PI) / 180;
+  const len = 70;
+  let body = tableBoard(250, 100);
+  body += glassPlate(mx, 14, 86, 78);
+  body += clampBlock(mx, 20, '');
+  body += clampBlock(mx, 80, '');
+  const [nx1, ny1] = obl(mx, hitY, z);
+  const [nx2, ny2] = obl(mx - 50, hitY, z);
+  body += dash(nx1, ny1, nx2, ny2, MUTED, 1.1);
+  const [nlx, nly] = obl(mx - 54, hitY + 8, z);
+  body += text(nlx, nly, L(lang, '法线', 'N'), { size: 10, fill: MUTED });
+  if (c.th < 1) {
+    body += oblLine([mx - 55, hitY, z], [mx, hitY, z], RAY, 1.5);
+    body += oblLine([mx, hitY, z], [mx - 55, hitY, z], RAY, 1.5);
+    body += text(...obl(mx - 40, hitY + 14, z), 'θ = 0', { size: 11, fill: RAY });
+  } else {
+    const ix = mx - Math.cos(th) * len;
+    const iy = hitY + Math.sin(th) * len * 0.55;
+    const rx = mx - Math.cos(th) * len;
+    const ry = hitY - Math.sin(th) * len * 0.55;
+    const [a1, b1] = obl(ix, iy, z);
+    const [a2, b2] = obl(mx, hitY, z);
+    const [a3, b3] = obl(rx, ry, z);
+    body += ray(a1, b1, a2, b2, RAY);
+    body += ray(a2, b2, a3, b3, RAY);
+    body += text(...obl(mx - 28, hitY + 18, z), 'θ', { size: 12, fill: RAY });
+    body += text(...obl(mx - 28, hitY - 10, z), 'θ', { size: 12, fill: RAY });
+  }
+  if (c.glancing) {
+    body += text(...obl(mx - 70, 8, z), '90°−θ', { size: 10, fill: MUTED });
+  }
+  if (c.second) {
+    const th2 = (28 * Math.PI) / 180;
+    const ix = mx - Math.cos(th2) * 50;
+    const iy = hitY + Math.sin(th2) * 28;
+    const rx = mx - Math.cos(th2) * 50;
+    const ry = hitY - Math.sin(th2) * 28;
+    body += oblLine([ix, iy, z], [mx, hitY, z], SEC, 1.3);
+    body += oblLine([mx, hitY, z], [rx, ry, z], SEC, 1.3);
+  }
+  const [mlx, mly] = obl(mx + 8, 82, z);
+  body += text(mlx, mly, L(lang, '镜面', 'mirror'), { anchor: 'start', size: 10, fill: MUTED });
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
 }
 
 function drawPlaneMirror(lang, step) {
+  // Textbook lab: glass plate + candle A (object) + candle B (image match), oblique view.
   const specs = {
-    '-1': { d: 52, h: 28, title: ['平面镜', 'Plane mirror'], cap: ['镜面、物体、虚像', 'Mirror, object, virtual image'] },
-    0: { d: 48, h: 26, title: ['像距 = 物距', 'Image distance = object'], cap: ['到镜面等远', 'Equal distances to the mirror'] },
-    1: { d: 56, h: 36, title: ['像高 = 物高', 'Same height'], cap: ['改变物高，像高跟着相等', 'Image height matches object'] },
-    2: { d: 50, h: 26, title: ['左右对调', 'Left-right swap'], cap: ['正立，左右与物对调', 'Erect, left and right swapped'], hands: true },
-    3: { d: 46, h: 24, title: ['光屏接不到', 'Screen misses it'], cap: ['镜后是虚像', 'Virtual image behind the mirror'], screen: true },
-    4: { d: 78, h: 26, title: ['物距加倍', 'Double the distance'], cap: ['像退后同样距离，大小不变', 'Image retreats the same, size unchanged'] },
+    '-1': { d: 48, h: 30, title: ['探究平面镜成像', 'Plane-mirror imaging'], cap: ['玻璃板、蜡烛 A 与 B', 'Glass plate, candles A and B'] },
+    0: { d: 44, h: 28, title: ['像距 = 物距', 'Image distance = object'], cap: ['A、像、B 到板等远', 'A, image, and B are equidistant'] },
+    1: { d: 44, h: 40, title: ['像高 = 物高', 'Same height'], cap: ['换更高的蜡烛，B 仍重合', 'Taller candle; B still coincides'] },
+    2: { d: 44, h: 28, title: ['左右对调', 'Left-right swap'], cap: ['正立，左右与物对调', 'Erect, left and right swapped'], hands: true },
+    3: { d: 44, h: 28, title: ['光屏接不到', 'Screen misses it'], cap: ['镜后是虚像，屏上无像', 'Virtual; nothing on a screen'], screen: true },
+    4: { d: 72, h: 28, title: ['物距加倍', 'Double the distance'], cap: ['像退后同样距离', 'Image retreats the same distance'] },
   };
   const c = specs[step];
-  const mx = 168;
-  const axis = 108;
-  const objX = mx - c.d;
-  const imgX = mx + c.d;
-  let body = line(mx, 28, mx, 128, INK, 2) + hatchesV(mx, 28, 128, true);
-  body += text(mx + 12, 36, L(lang, '镜', 'mirror'), { anchor: 'start', size: 10, fill: MUTED });
-  body += objArrow(objX, axis, c.h, true, INK);
-  body += dash(imgX, axis, imgX, axis - c.h, SEC, 1.4);
-  body += arrow(imgX, axis, imgX, axis - c.h, SEC, 1.4);
-  body += dash(objX, axis - c.h, imgX, axis - c.h, MUTED, 1);
-  body += text(objX, axis + 14, L(lang, '物', 'Obj'), { size: 10 });
-  body += text(imgX, axis + 14, L(lang, '虚像', 'virtual'), { size: 10, fill: SEC });
-  body += hDim(objX, mx, 24, L(lang, '物距', 'd'));
-  body += hDim(mx, imgX, 24, L(lang, '像距', 'd'), SEC);
+  const gx = 118;
+  const zMid = 48;
+  const aX = gx - c.d;
+  const bX = gx + c.d;
+  let body = tableBoard(250, 100);
+  body += glassPlate(gx, 12, 88, 82);
+  body += clampBlock(gx, 18, 'O');
+  body += clampBlock(gx, 82, "O'");
+  // Draw B (back) before A so A sits in front; ghost image in the plate.
+  if (!c.screen) {
+    body += candle3d(bX, zMid, { h: c.h, lit: false, label: 'B' });
+    // Motion cue when placing B onto the image (prep / equal-distance steps).
+    if (step === -1 || step === 0) {
+      const [x1, y1] = obl(bX + 22, c.h * 0.5, zMid);
+      const [x2, y2] = obl(bX + 4, c.h * 0.5, zMid);
+      body += arrow(x1, y1, x2, y2, SEC, 1.5);
+    }
+  }
+  body += candle3d(gx + 2, zMid, { h: c.h, lit: false, ghost: true });
+  body += candle3d(aX, zMid, { h: c.h, lit: true, label: 'A', thin: c.hands });
   if (c.hands) {
-    // Object L|R → virtual image shows R|L (left–right swap).
-    body += text(objX - 12, axis - c.h / 2, 'L', { size: 10, fill: RAY });
-    body += text(objX + 12, axis - c.h / 2, 'R', { size: 10, fill: SEC });
-    body += text(imgX - 12, axis - c.h / 2, 'R', { size: 10, fill: SEC });
-    body += text(imgX + 12, axis - c.h / 2, 'L', { size: 10, fill: RAY });
+    const [lx, ly] = obl(aX - 10, c.h * 0.55, zMid);
+    const [rx, ry] = obl(aX + 10, c.h * 0.55, zMid);
+    body += text(lx, ly, 'L', { size: 10, fill: RAY });
+    body += text(rx, ry, 'R', { size: 10, fill: SEC });
+    const [ilx, ily] = obl(gx + 2 - 10, c.h * 0.55, zMid);
+    const [irx, iry] = obl(gx + 2 + 10, c.h * 0.55, zMid);
+    body += text(ilx, ily, 'R', { size: 10, fill: SEC });
+    body += text(irx, iry, 'L', { size: 10, fill: RAY });
   }
   if (c.screen) {
-    body += screenPlate(imgX + 28, 48, 120);
-    body += text(imgX + 32, 44, L(lang, '屏上无像', 'no image'), { size: 10, fill: MUTED });
-    body += ray(objX, axis - c.h, mx, axis - c.h * 0.3);
-    body += ray(mx, axis - c.h * 0.3, mx - 20, 40);
+    body += screenOnStand(bX + 8, zMid, 48);
+    const [sx, sy] = obl(bX + 8, 70, zMid);
+    body += text(sx + 8, sy, L(lang, '屏上无像', 'no image'), { anchor: 'start', size: 10, fill: MUTED });
   }
-  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
+  // Distance marks on the table.
+  const pA = obl(aX, 0, zMid);
+  const pG = obl(gx, 0, zMid);
+  const pB = obl(bX, 0, zMid);
+  body += hDim(pA[0], pG[0], 178, L(lang, '物距', 'd'));
+  if (!c.screen) body += hDim(pG[0], pB[0], 178, L(lang, '像距', 'd'), SEC);
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
 }
 
 function drawRefraction(lang, step) {
+  // Semicircular glass block on the table (junior refraction / TIR lab).
   const specs = {
     '-1': { n1: 1, n2: 1.5, th: 40, title: ['光的折射', 'Refraction'], cap: ['界面、法线、两种介质', 'Interface, normal, two media'] },
     0: { n1: 1.33, n2: 1.33, th: 38, title: ['n₁ = n₂', 'n1 = n2'], cap: ['不偏折，θ₂ = θ₁', 'No bend, θ2 = θ1'] },
@@ -654,40 +842,46 @@ function drawRefraction(lang, step) {
     4: { n1: 1.5, n2: 1, th: 41.8, title: ['临界角附近', 'Near the critical angle'], cap: ['折射光线贴着界面', 'Refracted ray grazes the surface'], crit: true },
   };
   const c = specs[step];
-  const ix = 168;
-  const iy = 78;
-  const len = 70;
+  const z = 48;
+  const cx = 120;
   const th = (c.th * Math.PI) / 180;
-  const x1 = ix - Math.sin(th) * len;
-  const y1 = iy - Math.cos(th) * len;
   const s2raw = (c.n1 / c.n2) * Math.sin(th);
   const tir = c.tir || (!c.crit && s2raw >= 0.999);
   const s2 = Math.min(1, s2raw);
-  let body = box(20, iy, 280, 58, { fill: SEC, op: 0.1, stroke: 'none' });
-  body += line(24, iy, 296, iy, INK, 1.8);
-  body += dash(ix, 28, ix, 142, MUTED, 1.1);
-  body += text(36, iy - 8, `n₁=${c.n1}`, { anchor: 'start', size: 10, fill: MUTED });
-  body += text(36, iy + 16, `n₂=${c.n2}`, { anchor: 'start', size: 10, fill: SEC });
-  body += text(ix + 8, 38, L(lang, '法线', 'N'), { anchor: 'start', size: 10, fill: MUTED });
-  body += ray(x1, y1, ix, iy, RAY);
+  let body = tableBoard(250, 100);
+  // Flat face of the glass semicircle (interface).
+  body += glassPlate(cx, 20, 76, 70);
+  body += clampBlock(cx, 26, '');
+  body += clampBlock(cx, 70, '');
+  // Curved body cue (semicircle depth).
+  const [ex, ey] = obl(cx + 40, 35, z);
+  body += `<ellipse cx="${r(ex)}" cy="${r(ey)}" rx="36" ry="28" fill="rgba(160,190,210,0.18)" stroke="${INK}" stroke-width="1.3"/>`;
+  body += text(...obl(40, 60, z), `n₁=${c.n1}`, { size: 10, fill: MUTED });
+  body += text(...obl(cx + 20, 60, z), `n₂=${c.n2}`, { size: 10, fill: SEC });
+  const hitY = 36;
+  body += oblLine([cx, hitY, z], [cx - 48, hitY, z], MUTED, 1.1, '4 3');
+  body += text(...obl(cx - 52, hitY + 8, z), L(lang, '法线', 'N'), { size: 10, fill: MUTED });
+  const ix = cx - Math.cos(th) * 55;
+  const iy = hitY + Math.sin(th) * 30;
+  const [a1, b1] = obl(ix, iy, z);
+  const [a2, b2] = obl(cx, hitY, z);
+  body += ray(a1, b1, a2, b2, RAY);
   if (!tir) {
     const th2 = Math.asin(s2);
-    const x2 = ix + Math.sin(th2) * len;
-    const y2 = iy + Math.cos(th2) * len;
-    body += ray(ix, iy, x2, y2, RAY);
-    body += text(ix - 26, iy - 28, 'θ₁', { size: 11, fill: RAY });
-    if (c.crit) {
-      body += text(ix + 18, iy + 14, L(lang, '沿界面 θ₂=90°', 'along surface θ2=90°'), { anchor: 'start', size: 10, fill: SEC });
-    } else {
-      body += text(ix + 16, iy + 28, 'θ₂', { size: 11, fill: RAY });
-    }
+    const ox = cx + Math.cos(th2) * 50;
+    const oy = hitY + Math.sin(th2) * 28;
+    const [a3, b3] = obl(ox, oy, z);
+    body += ray(a2, b2, a3, b3, RAY);
+    body += text(...obl(cx - 24, hitY + 16, z), 'θ₁', { size: 11, fill: RAY });
+    body += text(...obl(cx + 18, hitY + 16, z), c.crit ? '90°' : 'θ₂', { size: 11, fill: RAY });
   } else {
-    const xr = ix + Math.sin(th) * len;
-    const yr = iy - Math.cos(th) * len;
-    body += ray(ix, iy, xr, yr, RAY);
-    body += text(ix + 24, iy - 28, L(lang, '仅反射', 'reflect only'), { anchor: 'start', size: 10, fill: RAY });
+    const rx = cx - Math.cos(th) * 55;
+    const ry = hitY - Math.sin(th) * 30;
+    const [a3, b3] = obl(rx, ry, z);
+    body += ray(a2, b2, a3, b3, RAY);
+    body += text(...obl(cx - 40, hitY - 12, z), L(lang, '仅反射', 'reflect only'), { size: 10, fill: RAY });
   }
-  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body);
+  return panel(lang, c.title[0], c.title[1], c.cap[0], c.cap[1], body, H3);
 }
 
 function drawVision(lang, step) {
@@ -756,29 +950,33 @@ function rotPoint(x, y, cx, cy, deg) {
 
 function drawLever(lang, step) {
   const spec = {
-    '-1': { tilt: 0, l1: 86, l2: 86, f1: 22, f2: 22, title: ['杠杆', 'Lever'], cap: ['支点、动力、阻力、力臂', 'Pivot, effort, load, arms'] },
-    0: { tilt: 0, l1: 84, l2: 84, f1: 26, f2: 26, title: ['力矩平衡', 'Moments balance'], cap: ['F₁L₁ = F₂L₂', 'F1 L1 = F2 L2'] },
-    1: { tilt: -12, l1: 116, l2: 60, f1: 24, f2: 24, title: ['加长 L₁', 'Longer L1'], cap: ['向左侧转动', 'Turns to the left'] },
-    2: { tilt: 0, l1: 116, l2: 60, f1: 20, f2: 39, title: ['加大 F₂', 'Larger F2'], cap: ['重新平衡', 'Balanced again'] },
-    3: { tilt: 0, l1: 104, l2: 52, f1: 20, f2: 40, title: ['L₂ 减半', 'Half L2'], cap: ['F₂ 约为两倍', 'F2 about twice'] },
-    4: { tilt: 0, l1: 78, l2: 78, f1: 38, f2: 38, title: ['同比增大', 'Scaled together'], cap: ['两边同倍，仍平衡', 'Same factor, still level'] },
+    '-1': { tilt: 0, l1: 70, l2: 70, f1: 18, f2: 18, title: ['杠杆', 'Lever'], cap: ['支点、动力、阻力、力臂', 'Pivot, effort, load, arms'] },
+    0: { tilt: 0, l1: 68, l2: 68, f1: 20, f2: 20, title: ['力矩平衡', 'Moments balance'], cap: ['F₁L₁ = F₂L₂', 'F1 L1 = F2 L2'] },
+    1: { tilt: -10, l1: 96, l2: 48, f1: 18, f2: 18, title: ['加长 L₁', 'Longer L1'], cap: ['向左侧转动', 'Turns to the left'] },
+    2: { tilt: 0, l1: 96, l2: 48, f1: 16, f2: 32, title: ['加大 F₂', 'Larger F2'], cap: ['重新平衡', 'Balanced again'] },
+    3: { tilt: 0, l1: 88, l2: 44, f1: 16, f2: 32, title: ['L₂ 减半', 'Half L2'], cap: ['F₂ 约为两倍', 'F2 about twice'] },
+    4: { tilt: 0, l1: 64, l2: 64, f1: 28, f2: 28, title: ['同比增大', 'Scaled together'], cap: ['两边同倍，仍平衡', 'Same factor, still level'] },
   }[step];
-  const cx = 160;
-  const cy = 78;
-  const [x1, y1] = rotPoint(cx - spec.l1, cy, cx, cy, spec.tilt);
-  const [x2, y2] = rotPoint(cx + spec.l2, cy, cx, cy, spec.tilt);
-  // Fulcrum sits under the beam (textbook knife-edge), weights hang downward.
-  let body = poly([[cx - 16, cy + 22], [cx + 16, cy + 22], [cx, cy + 2]], { fill: PAPER });
-  body += line(x1, y1, x2, y2, INK, 3.2);
-  body += circ(cx, cy, 3.2, { fill: INK, stroke: 'none' });
-  body += arrow(x1, y1 + 2, x1, y1 + 10 + spec.f1, RAY, 1.7);
-  body += arrow(x2, y2 + 2, x2, y2 + 10 + spec.f2, SEC, 1.7);
-  body += text(x1, y1 - 10, 'F₁', { size: 12, fill: RAY });
-  body += text(x2, y2 - 10, 'F₂', { size: 12, fill: SEC });
-  body += text((x1 + cx) / 2, Math.min(y1, cy) - 14, 'L₁', { size: 11, fill: RAY });
-  body += text((x2 + cx) / 2, Math.min(y2, cy) - 14, 'L₂', { size: 11, fill: SEC });
-  body += text(cx, cy + 36, L(lang, '支点', 'pivot'), { size: 10, fill: MUTED });
-  return panel(lang, spec.title[0], spec.title[1], spec.cap[0], spec.cap[1], body);
+  const cx = 120;
+  const z = 48;
+  const beamY = 16;
+  const tiltRad = (spec.tilt * Math.PI) / 180;
+  const yL = beamY + Math.sin(tiltRad) * spec.l1;
+  const yR = beamY - Math.sin(tiltRad) * spec.l2;
+  let body = tableBoard(240, 96);
+  body += fulcrum3d(cx, z);
+  body += oblLine([cx - spec.l1, yL, z], [cx + spec.l2, yR, z], INK, 3);
+  // Hung masses.
+  body += block3d(cx - spec.l1 - 8, z - 6, 16, 10 + spec.f1 * 0.35, 12, { y0: Math.max(0, yL - 4 - spec.f1 * 0.35) });
+  body += block3d(cx + spec.l2 - 8, z - 6, 16, 10 + spec.f2 * 0.35, 12, { y0: Math.max(0, yR - 4 - spec.f2 * 0.35) });
+  const [f1x, f1y] = obl(cx - spec.l1, yL + 18, z);
+  const [f2x, f2y] = obl(cx + spec.l2, yR + 18, z);
+  body += text(f1x, f1y, 'F₁', { size: 12, fill: RAY });
+  body += text(f2x, f2y, 'F₂', { size: 12, fill: SEC });
+  body += text(...obl((cx - spec.l1 + cx) / 2, beamY + 14, z), 'L₁', { size: 11, fill: RAY });
+  body += text(...obl((cx + spec.l2 + cx) / 2, beamY + 14, z), 'L₂', { size: 11, fill: SEC });
+  body += text(...obl(cx, -2, z), L(lang, '支点', 'pivot'), { size: 10, fill: MUTED });
+  return panel(lang, spec.title[0], spec.title[1], spec.cap[0], spec.cap[1], body, H3);
 }
 
 function drawPulley(lang, step) {
@@ -840,46 +1038,44 @@ function drawSpring(lang, step) {
     4: [['提高限度', 'Raise the limit'], ['x 回到限度内，F = kx 恢复', 'x is allowed again, F = kx returns']],
   };
   const [title, cap] = titles[step];
-  const x = step === 1 ? 46 : 26;
+  const stretch = step === 1 ? 42 : step === 3 ? 58 : 24;
   const over = step === 3;
   const kFat = step === 2;
-  const limit = step === 4 ? 70 : 48;
-  const top = 40;
-  const hook = top + 18 + x;
-  const limitY = top + 18 + limit;
-  let body = box(118, 28, 36, 112, { fill: PAPER });
-  for (let i = 0; i <= 6; i++) {
-    const y = 40 + i * 14;
-    body += line(142, y, i % 2 === 0 ? 152 : 148, y, MUTED, 1);
-  }
-  body += springV(136, 32, Math.min(hook, 120), kFat ? 8 : 6, kFat ? 8 : 6);
-  body += line(136, Math.min(hook, 122), 136, Math.min(hook + 6, 130), INK, 1.6);
-  body += path(`M 128 ${r(Math.min(hook + 6, 130))} L 144 ${r(Math.min(hook + 6, 130))} L 136 ${r(Math.min(hook + 14, 138))}`, { w: 1.4 });
-  body += line(154, Math.min(hook, 124), 168, Math.min(hook, 124), RAY, 1.6);
-  body += dash(108, limitY, 168, limitY, SEC, 1.2);
-  body += text(96, limitY + 3, L(lang, '限度', 'limit'), { anchor: 'end', size: 10, fill: SEC });
-  body += text(186, Math.min(hook, 124) + 4, over ? L(lang, '无力', 'no F') : 'F = kx', { anchor: 'start', size: 12, fill: over ? MUTED : RAY });
-  if (over) body += text(136, 146, L(lang, '已超出', 'beyond'), { size: 10, fill: RAY });
-  if (kFat) body += text(70, 70, L(lang, 'k 大', 'large k'), { size: 11, fill: SEC });
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  const limit = step === 4 ? 62 : 44;
+  let body = tableBoard(220, 90);
+  body += springScale3d(110, 48, stretch, { fat: kFat, limitY: 78 - 14 - limit });
+  body += block3d(102, 40, 16, 12, 14, { y0: 0 });
+  const [lx, ly] = obl(140, 50, 48);
+  body += text(lx, ly, over ? L(lang, '无力', 'no F') : 'F = kx', { anchor: 'start', size: 12, fill: over ? MUTED : RAY });
+  body += text(...obl(70, 78 - 14 - limit, 48), L(lang, '限度', 'limit'), { size: 10, fill: SEC });
+  if (over) body += text(...obl(110, 8, 48), L(lang, '已超出', 'beyond'), { size: 10, fill: RAY });
+  if (kFat) body += text(...obl(40, 50, 48), L(lang, 'k 大', 'large k'), { size: 11, fill: SEC });
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
-function frictionBlock(x, y, w, h, F, f, moving, heavy) {
-  let s = block(x, y, w, h);
-  s += ground(x - 16, x + w + 16, y + h);
-  // Textbook: pull F to the right, friction f opposite to the left.
-  s += arrow(x + w + 6, y + h / 2, x + w + 6 + F, y + h / 2, RAY, 1.7);
-  s += text(x + w + 10 + F, y + h / 2 - 6, 'F', { size: 11, fill: RAY });
+function frictionBlock3d(x, z, w, h, d, F, f, moving) {
+  let s = block3d(x, z, w, h, d);
+  const midY = h / 2;
+  const [fx1, fy1] = obl(x + w, midY, z + d / 2);
+  const [fx2, fy2] = obl(x + w + F, midY, z + d / 2);
+  s += arrow(fx1, fy1, fx2, fy2, RAY, 1.6);
+  s += text(fx2 + 6, fy2, 'F', { anchor: 'start', size: 11, fill: RAY });
   if (f > 0) {
-    s += arrow(x - 8, y + h / 2, x - 8 - f, y + h / 2, SEC, 1.7);
-    s += text(x - 14 - f, y + h / 2 - 6, 'f', { size: 11, fill: SEC });
+    const [a1, b1] = obl(x, midY, z + d / 2);
+    const [a2, b2] = obl(x - f, midY, z + d / 2);
+    s += arrow(a1, b1, a2, b2, SEC, 1.6);
+    s += text(a2 - 4, b2, 'f', { anchor: 'end', size: 11, fill: SEC });
   }
-  const g = heavy ? 28 : 16;
-  s += arrow(x + w / 2, y + h + 2, x + w / 2, y + h + 2 + g, INK, 1.4);
-  s += arrow(x + w / 2, y - 2, x + w / 2, y - 2 - g, MUTED, 1.4);
-  s += text(x + w / 2 + 8, y + h + g, 'G', { anchor: 'start', size: 10 });
-  s += text(x + w / 2 + 8, y - g, 'N', { anchor: 'start', size: 10, fill: MUTED });
-  if (moving) s += arrow(x + w / 2, y - 18 - (heavy ? 8 : 0), x + w / 2 + 22, y - 18 - (heavy ? 8 : 0), RAY, 1.3);
+  const [gx, gy] = obl(x + w / 2, 0, z + d / 2);
+  const [nx, ny] = obl(x + w / 2, h + 16, z + d / 2);
+  s += arrow(gx, gy - 2, gx, gy + 14, INK, 1.3);
+  s += text(gx + 8, gy + 14, 'G', { anchor: 'start', size: 10 });
+  s += arrow(nx, ny, nx, ny - 14, MUTED, 1.3);
+  s += text(nx + 8, ny - 10, 'N', { anchor: 'start', size: 10, fill: MUTED });
+  if (moving) {
+    const [mx1, my1] = obl(x + w / 2, h + 22, z + d / 2);
+    s += arrow(mx1, my1, mx1 + 20, my1, RAY, 1.2);
+  }
   return s;
 }
 
@@ -893,27 +1089,27 @@ function drawFriction(lang, step) {
     4: [['增大质量', 'Larger mass'], ['N = mg 变大，最大摩擦变大', 'N = mg grows, so does friction']],
   };
   const [title, cap] = titles[step];
-  let body = '';
+  let body = tableBoard(250, 100);
   if (step === 3) {
-    body += frictionBlock(36, 70, 70, 28, 26, 18, true, false);
-    body += frictionBlock(176, 78, 108, 20, 26, 18, true, false);
-    body += text(70, 58, L(lang, '小面积', 'small area'), { size: 10, fill: MUTED });
-    body += text(230, 66, L(lang, '大面积', 'large area'), { size: 10, fill: MUTED });
-    body += text(160, 132, L(lang, 'f 相同', 'same f'), { size: 12, fill: SEC });
-  } else if (step === -1) {
-    body += frictionBlock(100, 72, 90, 32, 24, 16, false, false);
+    body += frictionBlock3d(30, 30, 50, 22, 28, 22, 14, true);
+    body += frictionBlock3d(140, 30, 80, 16, 40, 22, 14, true);
+    body += text(...obl(55, 40, 44), L(lang, '小面积', 'small'), { size: 10, fill: MUTED });
+    body += text(...obl(180, 36, 50), L(lang, '大面积', 'large'), { size: 10, fill: MUTED });
+    body += text(160, 178, L(lang, 'f 相同', 'same f'), { size: 12, fill: SEC });
   } else if (step === 0) {
-    body += frictionBlock(100, 72, 90, 32, 20, 20, false, false);
-    body += text(230, 64, L(lang, '静止', 'rest'), { size: 12, fill: SEC, anchor: 'start' });
+    body += frictionBlock3d(80, 36, 70, 26, 36, 18, 18, false);
+    body += text(...obl(200, 40, 54), L(lang, '静止', 'rest'), { size: 12, fill: SEC });
   } else if (step === 1) {
-    body += frictionBlock(96, 72, 90, 32, 34, 20, true, false);
+    body += frictionBlock3d(70, 36, 70, 26, 36, 32, 18, true);
   } else if (step === 2) {
-    body += frictionBlock(90, 72, 90, 32, 48, 20, true, false);
-    body += text(250, 52, 'a', { size: 13, fill: RAY, anchor: 'start' });
+    body += frictionBlock3d(60, 36, 70, 26, 36, 46, 18, true);
+    body += text(...obl(200, 50, 54), 'a', { size: 13, fill: RAY });
+  } else if (step === 4) {
+    body += frictionBlock3d(70, 36, 76, 36, 40, 34, 26, true);
   } else {
-    body += frictionBlock(96, 64, 96, 40, 36, 30, true, true);
+    body += frictionBlock3d(80, 36, 70, 26, 36, 22, 14, false);
   }
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function pressurePatch(x, y, w, h, depth) {
@@ -930,29 +1126,30 @@ function drawSolidP(lang, step) {
     4: [['两个面积', 'Two areas'], ['同一 F，p 与 A 成反比', 'Same F, p inverse to A']],
   };
   const [title, cap] = titles[step];
-  let body = '';
-  const one = (x, bw, bh, arrows, depth, label) => {
-    let s = pressurePatch(x, 108, bw, 10, depth);
-    s += block(x + bw / 2 - 16, 108 - bh, 32, bh);
-    for (let i = 0; i < arrows; i++) s += arrow(x + 8 + i * (bw / arrows), 108 - bh - 4, x + 8 + i * (bw / arrows), 108 - bh - 22, INK, 1.4);
-    s += text(x + bw / 2, 132, label, { size: 10, fill: MUTED });
+  let body = tableBoard(250, 100);
+  const one = (x, z, aw, ah, ad, label) => {
+    let s = oblPoly3([[x, 0, z], [x + aw, 0, z], [x + aw, 0, z + ad], [x, 0, z + ad]], { fill: RAY, op: 0.2, w: 1.1 });
+    s += block3d(x + aw / 2 - 12, z + 4, 24, ah, Math.min(ad - 8, 20));
+    const [tx, ty] = obl(x + aw / 2, ah + 14, z + ad / 2);
+    s += arrow(tx, ty, tx, ty - 16, INK, 1.4);
+    s += text(...obl(x + aw / 2, -4, z + ad / 2), label, { size: 10, fill: MUTED });
     return s;
   };
   if (step === 4 || step === -1) {
-    body += one(36, 70, 36, 2, 0.18, L(lang, '大 A · 小 p', 'large A'));
-    body += one(180, 36, 36, 2, 0.45, L(lang, '小 A · 大 p', 'small A'));
+    body += one(30, 30, 70, 28, 40, L(lang, '大 A · 小 p', 'large A'));
+    body += one(150, 30, 36, 28, 40, L(lang, '小 A · 大 p', 'small A'));
   } else if (step === 1) {
-    body += one(120, 32, 40, 2, 0.5, 'A↓  p↑');
+    body += one(90, 36, 32, 32, 40, 'A↓  p↑');
   } else if (step === 2) {
-    body += one(110, 64, 34, 4, 0.4, '2F');
+    body += one(80, 36, 64, 28, 40, '2F');
   } else if (step === 3) {
-    body += one(48, 56, 34, 2, 0.28, 'F, A');
-    body += one(176, 92, 34, 4, 0.28, '2F, 2A');
-    body += text(160, 64, L(lang, 'p 相同', 'same p'), { size: 12, fill: SEC });
+    body += one(20, 30, 50, 26, 36, 'F, A');
+    body += one(120, 30, 90, 26, 36, '2F, 2A');
+    body += text(160, 178, L(lang, 'p 相同', 'same p'), { size: 12, fill: SEC });
   } else {
-    body += one(112, 64, 36, 2, 0.28, 'p = F/A');
+    body += one(80, 36, 64, 30, 40, 'p = F/A');
   }
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function tank(x, y, w, h, level, wide) {
@@ -973,38 +1170,34 @@ function drawLiquidP(lang, step) {
     4: [['连通平衡', 'Connected balance'], ['ρ₁h₁ = ρ₂h₂，ρ₂ 大则 h₂ 小', 'ρ1 h1 = ρ2 h2; larger ρ2, smaller h2']],
   };
   const [title, cap] = titles[step];
-  let body = '';
-  if (step === 3 || step === 4 || step === -1 && false) {
-    const hR = step === 4 ? 28 : 46;
-    body += utube(108, 40, 100, 88, 52, hR, true);
-    body += vDim(96, 128 - 52, 128, 'h₁', SEC);
-    body += text(130, 70, 'ρ₁', { size: 11, fill: SEC });
-    body += text(196, step === 4 ? 96 : 78, 'ρ₂', { size: 11, fill: RAY });
-    if (step === 4) body += text(230, 70, L(lang, 'h₂ 更小', 'smaller h2'), { anchor: 'start', size: 10, fill: RAY });
-  } else if (step === -1) {
-    body += tank(36, 48, 70, 78, 50, false);
-    body += vDim(118, 76, 124, 'h', SEC);
-    body += utube(180, 52, 80, 74, 40, 36, true);
-  } else if (step === 0) {
-    body += tank(90, 42, 100, 90, 62, false);
-    body += vDim(204, 70, 130, 'h', SEC);
-    body += arrow(140, 132, 140, 148, RAY, 1.6);
-    body += text(154, 146, 'p', { anchor: 'start', size: 12, fill: RAY });
+  let body = tableBoard(250, 100);
+  if (step === 3 || step === 4) {
+    const hR = step === 4 ? 22 : 36;
+    // U-tube as two cylinders joined by a base channel.
+    body += cylinder3d(80, 40, 12, 70, 40);
+    body += cylinder3d(150, 40, 12, 70, hR);
+    body += oblPoly3([[80, 0, 40], [150, 0, 40], [150, 8, 40], [80, 8, 40]], { fill: SEC, op: 0.2, w: 1.2 });
+    body += text(...obl(80, 48, 40), 'ρ₁', { size: 11, fill: SEC });
+    body += text(...obl(150, 48, 40), 'ρ₂', { size: 11, fill: RAY });
+    body += text(...obl(55, 20, 40), 'h₁', { size: 11, fill: SEC });
+    if (step === 4) body += text(...obl(175, 50, 40), L(lang, 'h₂ 更小', 'smaller h2'), { size: 10, fill: RAY });
   } else if (step === 1) {
-    body += tank(28, 46, 110, 80, 48, true);
-    body += tank(186, 46, 52, 80, 48, false);
-    body += text(83, 40, L(lang, 'p 相同', 'same p'), { size: 11, fill: SEC });
-    body += text(212, 40, L(lang, 'F 较小', 'smaller F'), { size: 11, fill: RAY });
-    body += arrow(70, 126, 70, 142, RAY, 1.5);
-    body += arrow(212, 126, 212, 136, RAY, 1.5);
+    body += beaker3d(60, 40, 36, 64, 40);
+    body += beaker3d(170, 40, 18, 64, 40);
+    body += text(...obl(60, 72, 40), L(lang, 'p 相同', 'same p'), { size: 11, fill: SEC });
+    body += text(...obl(170, 72, 40), L(lang, 'F 较小', 'smaller F'), { size: 11, fill: RAY });
+  } else if (step === 2) {
+    body += beaker3d(55, 40, 20, 64, 38);
+    body += beaker3d(160, 40, 40, 64, 38);
+    body += text(...obl(55, 72, 40), 'A₁', { size: 11 });
+    body += text(...obl(160, 72, 40), 'A₂', { size: 11 });
+    body += text(160, 178, L(lang, 'p 不变', 'p fixed'), { size: 11, fill: SEC });
   } else {
-    body += tank(40, 48, 70, 78, 46, false);
-    body += tank(180, 48, 110, 78, 46, true);
-    body += text(75, 42, 'A₁', { size: 11 });
-    body += text(235, 42, 'A₂', { size: 11 });
-    body += text(160, 132, L(lang, 'p 不变', 'p fixed'), { size: 11, fill: SEC });
+    body += beaker3d(100, 44, 40, 70, 46);
+    body += text(...obl(150, 30, 44), 'h', { size: 12, fill: SEC });
+    body += text(...obl(100, 8, 44), 'p = ρgh', { size: 12, fill: RAY });
   }
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function plateauGraph(lang, step, kind) {
@@ -1277,26 +1470,40 @@ function drawBalance(lang, step) {
   };
   const [title, cap] = titles[step];
   const tilt = step === 0 ? -8 : step === 2 ? 7 : 0;
-  const rider = step === 3 ? 8 : step === 0 ? 62 : step === 2 ? 22 : 40;
-  const cx = 158;
-  const cy = 68;
-  const [lx, ly] = rotPoint(cx - 92, cy, cx, cy, tilt);
-  const [rx, ry] = rotPoint(cx + 92, cy, cx, cy, tilt);
-  const [sx, sy] = rotPoint(cx + rider, cy, cx, cy, tilt);
-  let body = line(cx, cy + 4, cx, 124, INK, 2.2) + line(cx - 26, 124, cx + 26, 124, INK, 2.2);
-  body += line(lx, ly, rx, ry, INK, 2.6);
-  body += circ(cx, cy, 3, { fill: INK, stroke: 'none' });
-  body += line(lx, ly, lx, ly + 14, INK, 1.2) + line(rx, ry, rx, ry + 14, INK, 1.2);
-  body += path(`M ${r(lx - 16)} ${r(ly + 14)} Q ${r(lx)} ${r(ly + 26)} ${r(lx + 16)} ${r(ly + 14)}`, { w: 1.4 });
-  body += path(`M ${r(rx - 16)} ${r(ry + 14)} Q ${r(rx)} ${r(ry + 26)} ${r(rx + 16)} ${r(ry + 14)}`, { w: 1.4 });
-  body += block(lx - 8, ly + 4, 16, 10);
+  const rider = step === 3 ? 8 : step === 0 ? 50 : step === 2 ? 18 : 32;
+  const cx = 120;
+  const z = 48;
+  const beamY = 52;
+  const tiltRad = (tilt * Math.PI) / 180;
+  const yL = beamY + Math.sin(tiltRad) * 72;
+  const yR = beamY - Math.sin(tiltRad) * 72;
+  let body = tableBoard(240, 100);
+  // Column + base.
+  body += oblPoly3([[cx - 16, 0, z - 12], [cx + 16, 0, z - 12], [cx + 16, 0, z + 12], [cx - 16, 0, z + 12]], { fill: '#ddd8ce', w: 1.2 });
+  body += oblLine([cx, 0, z], [cx, beamY, z], INK, 2.2);
+  body += oblLine([cx - 72, yL, z], [cx + 72, yR, z], INK, 2.4);
+  // Pans.
+  const pan = (x, y, label) => {
+    let s = oblLine([x, y, z], [x, y - 12, z], INK, 1.2);
+    s += oblPathPts([[x - 16, y - 12, z], [x, y - 20, z], [x + 16, y - 12, z]], { w: 1.4 });
+    s += text(...obl(x, y - 28, z), label, { size: 10, fill: MUTED });
+    return s;
+  };
+  body += pan(cx - 72, yL, L(lang, '物', 'obj'));
+  body += pan(cx + 72, yR, L(lang, '砝码', 'wts'));
+  body += block3d(cx - 80, z - 6, 16, 10, 12, { y0: Math.max(0, yL - 30) });
   const nW = step === 2 ? 3 : step === 4 ? 1 : 2;
-  for (let i = 0; i < nW; i++) body += box(rx - 14 + i * 9, ry + 4, 8, 10, { fill: PAPER });
-  body += poly([[sx, sy - 9], [sx - 5, sy + 1], [sx + 5, sy + 1]], { fill: RAY, stroke: RAY, w: 0.8 });
-  body += text(lx, ly + 40, L(lang, '物', 'obj'), { size: 10 });
-  body += text(rx, ry + 40, L(lang, '砝码', 'wts'), { size: 10, fill: MUTED });
-  if (tilt === 0 && step !== -1 && step !== 3) body += text(cx, 146, L(lang, '水平', 'level'), { size: 11, fill: SEC });
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  for (let i = 0; i < nW; i++) {
+    body += block3d(cx + 60 + i * 10, z - 6, 8, 10, 10, { y0: Math.max(0, yR - 30) });
+  }
+  // Rider.
+  const rx = cx - 72 + rider * 1.8;
+  const ry = beamY + Math.sin(tiltRad) * (72 - rider * 1.8);
+  body += oblPoly3([[rx, ry, z], [rx - 4, ry + 8, z], [rx + 4, ry + 8, z]], { fill: RAY, stroke: RAY, w: 0.8 });
+  if (tilt === 0 && step !== -1 && step !== 3) {
+    body += text(...obl(cx, 8, z), L(lang, '水平', 'level'), { size: 11, fill: SEC });
+  }
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawAmpere(lang, step) {
@@ -1511,23 +1718,22 @@ function drawArchimedes(lang, step) {
   };
   const [title, cap] = titles[step];
   const frac = step === 2 || step === 3 || step === 4 ? 1 : step === -1 ? 0.7 : 0.55;
-  const deep = step === 3;
-  const level = deep ? 78 : 64;
-  // Overflow can (溢水杯) with spout → catch cylinder = Vdisp.
-  let body = beaker(48, 36, 110, 100, level);
-  body += path('M 158 58 L 186 72 L 186 80 L 158 68 Z', { fill: PAPER, w: 1.4 });
-  const catchH = 18 + Math.round(frac * 36);
-  body += cylinder(200, 70, 36, 66, catchH);
-  body += text(218, 148, 'Vdisp', { size: 11, fill: SEC });
-  body += submergedBlock(78, deep ? 58 : 72, 134, frac, step === 2 ? 'V' : '');
-  const fLen = step === 4 ? 14 : step === 3 ? 32 : 22;
-  body += arrow(94, 96, 94, 96 - fLen, SEC, 1.7);
-  body += text(108, 96 - fLen, 'Fb', { anchor: 'start', size: 12, fill: SEC });
-  body += arrow(94, 108, 94, 124, INK, 1.4);
-  body += text(108, 122, 'G', { anchor: 'start', size: 11 });
-  if (step === 4) body += text(250, 48, 'g↓', { anchor: 'start', size: 13, fill: RAY });
-  if (step === 3) body += text(250, 48, 'ρ↑', { anchor: 'start', size: 13, fill: RAY });
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  const level = step === 3 ? 58 : 48;
+  const catchH = 14 + Math.round(frac * 28);
+  let body = tableBoard(250, 100);
+  body += beaker3d(70, 42, 36, 70, level, { spout: true });
+  body += block3d(58, 34, 22, 16, 16, { y0: Math.max(4, level - frac * 22), label: step === 2 ? 'V' : '' });
+  body += cylinder3d(170, 50, 16, 58, catchH);
+  body += text(...obl(170, -4, 50), 'Vdisp', { size: 11, fill: SEC });
+  const fLen = step === 4 ? 12 : step === 3 ? 26 : 18;
+  const [bx, by] = obl(70, level - 8, 42);
+  body += arrow(bx, by, bx, by - fLen, SEC, 1.6);
+  body += text(bx + 10, by - fLen, 'Fb', { anchor: 'start', size: 12, fill: SEC });
+  body += arrow(bx - 10, by + 4, bx - 10, by + 16, INK, 1.3);
+  body += text(bx - 4, by + 20, 'G', { size: 11 });
+  if (step === 4) body += text(...obl(210, 60, 50), 'g↓', { size: 13, fill: RAY });
+  if (step === 3) body += text(...obl(210, 60, 50), 'ρ↑', { size: 13, fill: RAY });
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawFloat(lang, step) {
@@ -1540,34 +1746,29 @@ function drawFloat(lang, step) {
     4: [['潜艇压载', 'Submarine ballast'], ['压载使平均密度升高', 'Ballast raises the mean density']],
   };
   const [title, cap] = titles[step];
-  let body = beaker(70, 40, 160, 96, 70);
+  const z = 48;
+  let body = tableBoard(240, 100);
+  body += beaker3d(110, z, 48, 72, 44);
   if (step === 3) {
-    body += path('M 108 78 L 196 78 L 180 100 L 124 100 Z', { fill: PAPER, w: 1.6 });
-    body += text(152, 92, L(lang, '船', 'ship'), { size: 11 });
+    body += oblPoly3([[80, 36, z - 10], [140, 36, z - 10], [132, 22, z + 10], [88, 22, z + 10]], { fill: PAPER, w: 1.5 });
+    body += text(...obl(110, 40, z), L(lang, '船', 'ship'), { size: 11 });
   } else if (step === 4) {
-    body += path('M 118 96 L 186 90 Q 196 108 186 118 L 118 118 Q 108 108 118 96 Z', { fill: PAPER, w: 1.6 });
-    body += box(140, 104, 16, 8, { fill: SEC, op: 0.35, stroke: INK, w: 1 });
-    body += text(152, 112, L(lang, '水', 'ballast'), { size: 9, fill: SEC });
+    body += block3d(92, z - 12, 36, 18, 24, { y0: 8, label: L(lang, '水', 'ballast'), labelFill: SEC });
   } else if (step === 2) {
-    body += block(128, 100, 44, 28);
-    // Bottom support N upward; G down; Fb up so N = G − Fb.
-    body += arrow(150, 128, 150, 112, MUTED, 1.5);
-    body += text(166, 118, 'N', { anchor: 'start', size: 12, fill: MUTED });
-    body += arrow(138, 114, 138, 100, SEC, 1.3);
-    body += text(118, 104, 'Fb', { anchor: 'end', size: 10, fill: SEC });
-    body += arrow(162, 108, 162, 128, INK, 1.3);
-    body += text(176, 124, 'G', { anchor: 'start', size: 10 });
+    body += block3d(96, z - 10, 28, 18, 20, { y0: 2 });
+    const [nx, ny] = obl(110, 24, z);
+    body += text(nx + 20, ny, 'N', { size: 12, fill: MUTED });
+    body += text(nx - 24, ny - 8, 'Fb', { size: 10, fill: SEC });
+    body += text(nx + 20, ny + 16, 'G', { size: 10 });
   } else if (step === 1) {
-    body += block(128, 78, 40, 28);
-    body += text(148, 96, 'ρ=ρ液', { size: 10 });
+    body += block3d(96, z - 10, 28, 18, 20, { y0: 22, label: 'ρ=ρ液' });
   } else {
-    body += block(130, 62, 40, 26);
-    body += arrow(150, 70, 150, 52, SEC, 1.5);
-    body += arrow(150, 78, 150, 96, INK, 1.5);
-    body += text(168, 58, 'Fb', { anchor: 'start', size: 11, fill: SEC });
-    body += text(168, 96, 'G', { anchor: 'start', size: 11 });
+    body += block3d(96, z - 10, 28, 16, 20, { y0: 36 });
+    const [fx, fy] = obl(110, 50, z);
+    body += text(fx + 22, fy - 10, 'Fb', { size: 11, fill: SEC });
+    body += text(fx + 22, fy + 12, 'G', { size: 11 });
   }
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawCircuit(lang, step) {
@@ -1636,7 +1837,7 @@ function drawCircuit(lang, step) {
 }
 
 function drawDensityLab(lang, step) {
-  // Junior lab: graduated cylinder V1 → immerse → V2; ρ = m/(V2−V1). No overflow can.
+  // Junior lab: graduated cylinder V1 → immerse → V2; ρ = m/(V2−V1).
   const titles = {
     '-1': [['量筒测体积', 'Cylinder volume'], ['天平测 m，量筒读 V₁、V₂', 'Balance for m; cylinder for V1, V2']],
     0: [['放入之前', 'Before immersion'], ['记下样品与液面 V₁', 'Note the specimen and level V1']],
@@ -1647,28 +1848,28 @@ function drawDensityLab(lang, step) {
   };
   const [title, cap] = titles[step];
   const dropped = step !== 0 && step !== -1;
-  const v1 = step === 4 ? 28 : 34;
-  const v2 = dropped ? v1 + (step === 4 ? 40 : 28) : v1;
-  const cyTop = 36;
-  const cyH = 92;
-  let body = cylinder(88, cyTop, 52, cyH, dropped ? v2 : v1);
-  body += text(148, cyTop + cyH - v1 - 2, 'V₁', { anchor: 'start', size: 11, fill: MUTED });
+  const v1 = step === 4 ? 22 : 28;
+  const v2 = dropped ? v1 + (step === 4 ? 30 : 22) : v1;
+  let body = tableBoard(250, 100);
+  body += cylinder3d(70, 48, 18, 78, dropped ? v2 : v1);
+  body += text(...obl(96, v1, 48), 'V₁', { anchor: 'start', size: 11, fill: MUTED });
   if (dropped) {
-    body += block(102, cyTop + cyH - v2 - 4, 24, 20);
-    body += text(148, cyTop + cyH - v2 + 6, 'V₂', { anchor: 'start', size: 11, fill: SEC });
+    body += block3d(60, 40, 18, 14, 14, { y0: Math.max(4, v2 - 16) });
+    body += text(...obl(96, v2, 48), 'V₂', { anchor: 'start', size: 11, fill: SEC });
   } else {
-    body += block(200, 48, 24, 18);
-    body += text(212, 42, L(lang, '样品', 'sample'), { size: 10, fill: MUTED });
+    body += block3d(150, 40, 20, 14, 14, { label: L(lang, '样品', 'sample') });
   }
-  body += box(200, 88, 72, 32, { fill: PAPER });
-  body += text(236, 108, 'm', { size: 13 });
-  if (step === 2) body += text(236, 78, 'V₂−V₁', { size: 11, fill: SEC });
+  body += oblPoly3([[160, 0, 30], [220, 0, 30], [220, 28, 30], [160, 28, 30]], { fill: PAPER, w: 1.3 });
+  body += text(...obl(190, 14, 30), 'm', { size: 13 });
+  if (step === 2) {
+    body += text(...obl(190, 48, 40), 'V₂−V₁', { size: 11, fill: SEC });
+    body += text(...obl(190, 64, 40), 'ρ', { size: 14, fill: RAY });
+  }
   if (step === 3) {
-    body += text(236, 78, 'm/V₂', { size: 12, fill: RAY });
-    body += text(236, 132, L(lang, '偏小', 'low'), { size: 11, fill: RAY });
+    body += text(...obl(190, 48, 40), 'm/V₂', { size: 12, fill: RAY });
+    body += text(...obl(190, 64, 40), L(lang, '偏小', 'low'), { size: 11, fill: RAY });
   }
-  if (step === 2) body += text(236, 132, 'ρ', { size: 14, fill: RAY });
-  return panel(lang, title[0], title[1], cap[0], cap[1], body);
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function shown(lang, step, table, draw) {
@@ -1711,31 +1912,34 @@ function drawAc(lang, step) {
 }
 
 function drawAtmosphere(lang, step) {
-  return shown(lang, step, {
+  const titles = {
     '-1': [['大气压', 'Atmosphere'], ['托里拆利管与马德堡半球', 'Torricelli tube and hemispheres']],
     0: [['水银柱', 'Mercury column'], ['记下 P 和 g，读高度 h', 'Note P and g, read height h']],
     1: [['托里拆利', 'Torricelli'], ['h = P / (ρ g)', 'h = P / (ρ g)']],
     2: [['气压增大', 'Higher pressure'], ['水银柱同比变高', 'The column rises in proportion']],
     3: [['g 增大', 'Larger g'], ['同一气压下水银柱变矮', 'Same pressure, shorter column']],
     4: [['半球', 'Hemispheres'], ['分离力 P·πr²，r 加倍力变 4 倍', 'Separating force P·πr²']],
-  }, () => {
-    if (step === 4) {
-      let s = path('M 70 90 A 40 40 0 0 1 150 90 L 70 90', { fill: PAPER, w: 1.6 });
-      s += path('M 170 90 A 40 40 0 0 0 250 90 L 170 90', { fill: PAPER, w: 1.6 });
-      s += arrow(150, 90, 118, 90, RAY, 1.6);
-      s += arrow(170, 90, 202, 90, RAY, 1.6);
-      s += text(160, 70, 'F', { size: 13, fill: RAY });
-      s += text(160, 120, 'r', { size: 12, fill: SEC });
-      return s;
-    }
-    const h = step === 2 ? 78 : step === 3 ? 36 : 58;
-    let s = beaker(118, 78, 80, 52, 28);
-    s += path(`M 146 78 L 146 ${r(78 - h)} L 166 ${r(78 - h)} L 166 78`, { w: 1.6 });
-    s += box(148, 78 - h, 16, h, { fill: MUTED, op: 0.25, stroke: 'none' });
-    s += vDim(184, 78 - h, 78, 'h', SEC);
-    s += text(40, 60, step === 2 ? 'P↑' : 'P', { anchor: 'start', size: 14 });
-    return s;
-  });
+  };
+  const [title, cap] = titles[step];
+  let body = tableBoard(250, 100);
+  if (step === 4) {
+    const [c1x, c1y] = obl(80, 36, 48);
+    const [c2x, c2y] = obl(160, 36, 48);
+    body += `<ellipse cx="${r(c1x)}" cy="${r(c1y)}" rx="32" ry="22" fill="${PAPER}" stroke="${INK}" stroke-width="1.5"/>`;
+    body += `<ellipse cx="${r(c2x)}" cy="${r(c2y)}" rx="32" ry="22" fill="${PAPER}" stroke="${INK}" stroke-width="1.5"/>`;
+    body += arrow(c1x + 28, c1y, c1x + 8, c1y, RAY, 1.5);
+    body += arrow(c2x - 28, c2y, c2x - 8, c2y, RAY, 1.5);
+    body += text(...obl(120, 60, 48), 'F', { size: 13, fill: RAY });
+    body += text(...obl(120, 12, 48), 'r', { size: 12, fill: SEC });
+  } else {
+    const h = step === 2 ? 62 : step === 3 ? 28 : 46;
+    body += beaker3d(100, 44, 32, 36, 18);
+    // Mercury tube standing in the dish.
+    body += oblPoly3([[112, 18, 44], [124, 18, 44], [124, 18 + h, 44], [112, 18 + h, 44]], { fill: MUTED, op: 0.28, w: 1.4 });
+    body += text(...obl(140, 18 + h / 2, 44), 'h', { size: 12, fill: SEC });
+    body += text(...obl(40, 50, 44), step === 2 ? 'P↑' : 'P', { size: 14 });
+  }
+  return panel(lang, title[0], title[1], cap[0], cap[1], body, H3);
 }
 
 function drawLevels(lang, step) {
